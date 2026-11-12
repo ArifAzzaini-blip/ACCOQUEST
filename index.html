@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand"><span class="brand-mark">A</span><span>ACCO<span class="accent">QUEST</span><small>SCAN. ANSWER. SPIN. WIN.</small></span></a>
+  <div class="top-status"><i class="live-dot"></i> MULTIPLAYER ARENA</div>
+</header>
+<main class="shell">
+  <section id="home" class="panel hero">
+    <div class="eyebrow">ACCOUNTING QUIZ BATTLE</div>
+    <h1>Think fast.<br><span class="gradient">Score higher.</span></h1>
+    <p class="muted">Cabaran perakaunan berbilang pemain. Scan kad NFC, jawab soalan, pilih block dan rebut mata tertinggi.</p>
+    <div class="home-identity">
+      <label for="usernameHome">YOUR USERNAME</label>
+      <input id="usernameHome" maxlength="18" placeholder="Enter your player name" autocomplete="nickname">
+    </div>
+    <div class="home-actions">
+      <button id="createBtn" class="btn primary">CREATE LOBBY</button>
+      <div class="join-box"><input id="joinCode" inputmode="numeric" maxlength="6" placeholder="6-DIGIT CODE"><button id="joinBtn" class="btn secondary">JOIN</button></div>
+    </div>
+    <div class="feature-row"><span>✦ 2–4 PLAYERS</span><span>✦ LIVE LEADERBOARD</span><span>✦ NFC / MANUAL ID</span></div>
+  </section>
+
+  <section id="lobby" class="panel hidden">
+    <div class="section-head"><div><div class="eyebrow">GAME LOBBY</div><h2>Waiting room</h2></div>
+      <div class="code-wrap"><small>LOBBY CODE</small><strong id="lobbyCode">------</strong><button id="copyCode" class="icon-btn">▣</button></div>
+    </div>
+    <div class="identity-row"><label>USERNAME<input id="username" maxlength="18" placeholder="Your player name"></label><button id="saveName" class="btn secondary">SET NAME</button></div>
+    <div class="players-head"><h3>Players <span id="playerCount" class="count">0/4</span></h3><span class="muted tiny">Minimum 2 players</span></div>
+    <div id="playersList" class="players-list"></div>
+    <div class="lobby-footer"><p id="lobbyHint" class="muted tiny">Set your username, then press READY.</p><div class="action-row"><button id="readyBtn" class="btn secondary" disabled>READY</button><button id="startBtn" class="btn primary hidden" disabled>START GAME →</button></div></div>
+  </section>
+
+  <section id="game" class="hidden">
+    <div class="game-top"><div><div class="eyebrow">MATCH IN PROGRESS</div><h2 id="roundLabel">ROUND 1</h2></div><div class="turn-chip"><i class="live-dot"></i><div><small>TURN PLAYER</small><strong id="turnPlayer">—</strong></div></div></div>
+    <div class="game-grid">
+      <div class="main-column">
+        <section class="panel game-panel">
+          <div class="section-head"><div><div class="eyebrow">01 / QUESTION</div><h3>NFC Scanner</h3></div><span id="scanState" class="status-pill">WAITING</span></div>
+          <div id="scanArea" class="scan-area">
+            <div class="nfc-icon">⌁</div><h3>Tap your NFC card</h3><p class="muted tiny">Imbas kad untuk memuatkan soalan perakaunan.</p>
+            <button id="scanBtn" class="btn primary">SCAN NFC CARD</button>
+            <div class="or-line"><span>OR ENTER ID MANUALLY</span></div>
+            <div class="manual-row"><input id="questionId" placeholder="Contoh: ACC001"><button id="manualBtn" class="btn secondary">LOAD</button></div>
+            <p id="nfcHelp" class="muted tiny">NFC scanner berjalan pada halaman HTTPS penuh. Jika NFC tidak tersedia, masukkan Question ID secara manual.</p>
+          </div>
+          <div id="questionBox" class="question-box hidden">
+            <div class="question-meta"><span id="qId"></span><span id="qCategory"></span><span id="timer" class="timer">30s</span></div>
+            <h3 id="qText"></h3><div id="answers" class="answers"></div>
+            <button id="submitAnswer" class="btn primary full" disabled>SUBMIT ANSWER</button><div id="answerFeedback" class="feedback hidden"></div>
+          </div>
+        </section>
+        <section id="blockPanel" class="panel game-panel hidden"><div class="eyebrow">02 / STRATEGY</div><h3>Choose your block</h3><p class="muted tiny">Pilih satu block. Block yang telah dipilih tidak boleh digunakan semula dalam match.</p><div id="blocks" class="blocks"></div></section>
+        <section id="spinPanel" class="panel game-panel hidden"><div class="eyebrow">03 / REWARD</div><h3>Spin for points</h3><div class="wheel-wrap"><div id="wheel" class="wheel"><div class="wheel-center">SPIN</div></div><div class="wheel-pointer"></div></div><button id="spinBtn" class="btn primary full">SPIN THE WHEEL</button><div id="spinResult" class="spin-result hidden"></div></section>
+      </div>
+      <aside class="panel leaderboard"><div class="section-head"><div><div class="eyebrow">LIVE RANKING</div><h3>Leaderboard</h3></div><span class="live-label">LIVE</span></div><div id="leaderboardRows"></div></aside>
+    </div>
+  </section>
+
+  <section id="result" class="panel hidden"><div class="eyebrow">MATCH COMPLETE</div><h1>Final <span class="gradient">results.</span></h1><div id="winnerBanner" class="winner-banner"></div><h3>TOP 3 PLAYERS</h3><div id="finalRows" class="final-rows"></div><div class="action-row"><button id="playAgain" class="btn primary">PLAY AGAIN</button><button id="backLobby" class="btn secondary">BACK TO LOBBY</button></div></section>
+  <div id="toast" class="toast hidden"></div>
+</main>
+<footer>ACCOQUEST <span>•</span> ACCOUNTING QUIZ ARENA</footer>
+<script src="/app.js" defer></script>
+</body>
+</html>
