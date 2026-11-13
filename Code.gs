@@ -259,7 +259,8 @@ function submitAnswer(payload) {
     lobby.game.lastResult = {
       playerId: playerId,
       correct: correct,
-      questionId: qid
+      questionId: qid,
+      correctAnswer: correctAnswer
     };
 
     lobby.game.phase = 'block';
