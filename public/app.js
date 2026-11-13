@@ -787,7 +787,7 @@ async function submitAnswer(answer) {
         $("answerFeedback").classList.remove("hidden");
 
         // Tunggu sebelum beralih ke fasa seterusnya.
-        await new Promise(resolve => setTimeout(resolve, 2500));
+        await new Promise(resolve => setTimeout(resolve, 4000));
 
         await poll();
 
