@@ -728,9 +728,7 @@ async function scanNfc() {
 
 
 async function submitAnswer(answer) {
-    if (!activeQuestion || isSubmitting) {
-        return;
-    }
+    if (!activeQuestion || isSubmitting) return;
 
     isSubmitting = true;
     clearInterval(countdown);
@@ -745,44 +743,61 @@ async function submitAnswer(answer) {
             answer
         });
 
+        console.log("SUBMIT ANSWER RESULT:", result);
+
+        if (!result || typeof result.correct !== "boolean") {
+            throw new Error("Keputusan jawapan tidak diterima daripada server.");
+        }
+
         const correctAnswer = String(
             result.correctAnswer || ""
         ).trim().toUpperCase();
 
-        // Paparkan warna pada setiap pilihan jawapan.
-        document.querySelectorAll(".answer-option").forEach((button) => {
+        // Warnakan pilihan jawapan.
+        document.querySelectorAll(".answer-option").forEach(button => {
             const option = button.dataset.answer;
 
             button.disabled = true;
-            button.classList.remove("selected");
+            button.classList.remove(
+                "selected",
+                "answer-correct",
+                "answer-wrong"
+            );
 
-            if (option === correctAnswer) {
+            if (correctAnswer && option === correctAnswer) {
                 button.classList.add("answer-correct");
-            } else if (
-                option === String(answer).toUpperCase() &&
-                !result.correct
+            }
+
+            if (
+                !result.correct &&
+                option === String(answer).toUpperCase()
             ) {
                 button.classList.add("answer-wrong");
             }
         });
 
-        // Paparkan maklum balas.
+        // Paparkan keputusan.
         $("answerFeedback").textContent = result.correct
             ? "BETUL! Jawapan tepat."
-            : `SALAH! Jawapan yang betul ialah ${correctAnswer}.`;
+            : `SALAH! Jawapan yang betul ialah ${correctAnswer || "tidak diterima"}.`;
 
         $("answerFeedback").className =
             `feedback ${result.correct ? "correct" : "wrong"}`;
 
         $("answerFeedback").classList.remove("hidden");
 
-        // Beri masa untuk pemain melihat warna jawapan.
-        await new Promise(resolve => setTimeout(resolve, 1800));
+        // Tunggu sebelum beralih ke fasa seterusnya.
+        await new Promise(resolve => setTimeout(resolve, 2500));
 
         await poll();
 
     } catch (error) {
+        console.error("SUBMIT ANSWER ERROR:", error);
+
+        toast(error.message || "Gagal menghantar jawapan.");
+
         $("submitAnswer").disabled = false;
+
     } finally {
         isSubmitting = false;
     }
