@@ -15,7 +15,58 @@ const pages=['home','lobby','game','result'];
 function show(id){pages.forEach(x=>$(x).classList.toggle('hidden',x!==id));$('menuHomeBtn').classList.toggle('hidden',id==='home');}
 function renderLobbySkeleton(){ $('lobbyCode').classList.add('skeleton');$('lobbyCode').textContent='------';$('playerCount').classList.add('skeleton');$('playersList').innerHTML='<div class="skeleton-card"></div><div class="skeleton-card"></div>'; }
 function clearLobbySkeleton(){ $('lobbyCode').classList.remove('skeleton');$('playerCount').classList.remove('skeleton');}
-function renderQuestionSkeleton(){ $('scanArea').classList.add('hidden');$('questionBox').classList.remove('hidden');$('qId').textContent='';$('qCategory').textContent='';$('qText').classList.add('skeleton-question');$('qText').textContent=' ';$('answers').innerHTML='<div class="skeleton-answer"></div><div class="skeleton-answer"></div><div class="skeleton-answer"></div><div class="skeleton-answer"></div>';$('submitAnswer').disabled=true;}
+function renderGame(){
+  const g=state.game;
+  if(!g)return;
+
+  $('roundLabel').textContent=`ROUND ${g.round} / ${g.totalRounds}`;
+  $('turnPlayer').textContent=g.currentPlayerName||'—';
+  $('scanState').textContent=g.phase.toUpperCase();
+
+  const mine=g.isMyTurn;
+
+  $('scanBtn').disabled=!mine||g.phase!=='question';
+  $('manualBtn').disabled=!mine||g.phase!=='question';
+
+  $('blockPanel').classList.toggle('hidden',!mine||g.phase!=='block');
+  $('spinPanel').classList.toggle('hidden',!mine||g.phase!=='spin');
+
+  renderLeaderboard();
+
+  if(mine && g.phase==='question'){
+
+    if(questionLoading){
+      $('scanArea').classList.add('hidden');
+      $('questionBox').classList.remove('hidden');
+    }
+    else if(activeQuestion){
+      $('scanArea').classList.add('hidden');
+      $('questionBox').classList.remove('hidden');
+    }
+    else{
+      $('scanArea').classList.remove('hidden');
+      $('questionBox').classList.add('hidden');
+    }
+
+  } else {
+    $('scanArea').classList.add('hidden');
+    $('questionBox').classList.add('hidden');
+  }
+
+  if(mine&&g.phase==='block')renderBlocks();
+
+  if(g.lastResult&&g.lastResult.playerId===playerId&&g.phase!=='question'){
+    $('answerFeedback').textContent=
+      g.lastResult.correct
+      ?'BETUL! Jawapan tepat.'
+      :'SALAH. Jawapan tidak tepat.';
+
+    $('answerFeedback').className=
+      'feedback '+(g.lastResult.correct?'correct':'wrong');
+
+    $('answerFeedback').classList.remove('hidden');
+  }
+}
 function toast(msg){const el=$('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.add('hidden'),3500);}
 async function gas(name,data){
  const response=await fetch('/api/game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:name,data})});
