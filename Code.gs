@@ -353,8 +353,11 @@ function doPost(e) {
       case 'resetGame': result = resetGame(data); break;
       default: throw new Error('Unknown API action: ' + payload.action);
     }
-    return ContentService.createTextOutput(JSON.stringify({ok:true,data:result}))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      data: result,
+      apiVersion: "ACCOQUEST-FIX-131126"
+    })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ok:false,error:err.message || String(err)}))
       .setMimeType(ContentService.MimeType.JSON);
