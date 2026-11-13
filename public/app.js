@@ -1002,49 +1002,32 @@ function setupWheelLabels() {
 // ANIMASI WHEEL
 async function spinWheelToPoints(points) {
     const wheel = $("wheel");
-
     const targetIndex = WHEEL_POINTS.indexOf(Number(points));
 
-    if (!wheel) {
-        throw new Error("Elemen Wheel tidak dijumpai.");
-    }
-
+    if (!wheel) throw new Error("Wheel tidak dijumpai.");
     if (targetIndex === -1) {
-        throw new Error(`Nilai mata ${points} tidak sah.`);
+        throw new Error(`Nilai mata ${points} tiada pada Wheel.`);
     }
 
     const segmentCenter = targetIndex * 36 + 18;
-
-    const currentAngle =
-        ((wheelRotation % 360) + 360) % 360;
-
+    const currentAngle = ((wheelRotation % 360) + 360) % 360;
     const alignment =
         (360 - ((segmentCenter + currentAngle) % 360)) % 360;
 
     const startRotation = wheelRotation;
+    const endRotation = startRotation + (360 * 6) + alignment;
 
-    const endRotation =
-        startRotation + (360 * 6) + alignment;
-
-    // Hentikan animasi terdahulu.
-    wheel.getAnimations().forEach(animation => {
-        animation.cancel();
-    });
-
+    // Pastikan roda bermula pada kedudukan semasa
     wheel.style.transform = `rotate(${startRotation}deg)`;
 
-    // Paksa browser membaca kedudukan awal.
+    // Paksa browser mengemas kini kedudukan roda
     void wheel.offsetWidth;
 
-    // Jalankan animasi.
+    // Jalankan animasi putaran
     const animation = wheel.animate(
         [
-            {
-                transform: `rotate(${startRotation}deg)`
-            },
-            {
-                transform: `rotate(${endRotation}deg)`
-            }
+            { transform: `rotate(${startRotation}deg)` },
+            { transform: `rotate(${endRotation}deg)` }
         ],
         {
             duration: 4500,
@@ -1055,14 +1038,10 @@ async function spinWheelToPoints(points) {
 
     await animation.finished;
 
-    // Simpan kedudukan akhir.
     wheelRotation = endRotation;
-
-    wheel.style.transform = `rotate(${endRotation}deg)`;
-
+    wheel.style.transform = `rotate(${wheelRotation}deg)`;
     animation.cancel();
 }
-
 
 // Paparkan nombor mata.
 setupWheelLabels();
