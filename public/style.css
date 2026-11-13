@@ -281,6 +281,27 @@
     pointer-events: none;
 }
 
+/* JAWAPAN BETUL - HIJAU */
+.answer-option.answer-correct {
+    background: #064e3b !important;
+    border: 2px solid #22c55e !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 15px #22c55e55;
+}
+
+/* JAWAPAN SALAH - MERAH */
+.answer-option.answer-wrong {
+    background: #7f1d1d !important;
+    border: 2px solid #ef4444 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 15px #ef444455;
+}
+
+/* Kekalkan warna selepas dihantar */
+.answer-option:disabled {
+    opacity: 1;
+    cursor: default;
+}
 .wheel-center {
     pointer-events: none;
 }
