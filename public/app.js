@@ -242,7 +242,7 @@ async function poll() {
         });
 
         // Jangan render semula ketika Wheel sedang berpusing.
-        if (spinBusy) return;
+        if (spinBusy || isSubmitting) return;
 
         renderState();
 
@@ -732,7 +732,6 @@ async function submitAnswer(answer) {
 
     isSubmitting = true;
     clearInterval(countdown);
-
     $("submitAnswer").disabled = true;
 
     try {
@@ -786,21 +785,21 @@ async function submitAnswer(answer) {
 
         $("answerFeedback").classList.remove("hidden");
 
-        // Tunggu sebelum beralih ke fasa seterusnya.
+        // Kekalkan keputusan selama 4 saat.
         await new Promise(resolve => setTimeout(resolve, 4000));
-
-        await poll();
 
     } catch (error) {
         console.error("SUBMIT ANSWER ERROR:", error);
-
         toast(error.message || "Gagal menghantar jawapan.");
-
         $("submitAnswer").disabled = false;
+        return;
 
     } finally {
         isSubmitting = false;
     }
+
+    // Kemas kini game selepas keputusan dipaparkan.
+    await poll();
 }
 
 $("submitAnswer").addEventListener("click", () => {
@@ -815,7 +814,6 @@ $("submitAnswer").addEventListener("click", () => {
 $("manualBtn").addEventListener("click", () => {
     loadQuestion($("questionId").value.trim());
 });
-
 
 /* -----------------------------
    15. CREATE & JOIN LOBBY
