@@ -313,6 +313,7 @@
     border-radius: 10px;
     font-weight: bold;
     text-align: center;
+    white-space: pre-line;
 }
 
 .feedback.correct {
