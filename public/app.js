@@ -233,15 +233,16 @@ function startPolling() {
 }
 
 async function poll() {
-    if (!lobbyId) {
-        return;
-    }
+    if (!lobbyId) return;
 
     try {
         state = await gas("getGameState", {
             lobbyId,
             playerId
         });
+
+        // Jangan render semula ketika Wheel sedang berpusing.
+        if (spinBusy) return;
 
         renderState();
 
@@ -257,6 +258,7 @@ async function poll() {
                 urlQuestionLoaded = false;
             });
         }
+
     } catch (error) {
         toast(error.message);
         clearInterval(pollTimer);
