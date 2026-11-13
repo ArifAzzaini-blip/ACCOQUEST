@@ -9,10 +9,7 @@ export async function onRequest(context) {
     };
 
     if (request.method === "OPTIONS") {
-        return new Response(null, {
-            status: 204,
-            headers: cors
-        });
+        return new Response(null, { status: 204, headers: cors });
     }
 
     if (request.method !== "POST") {
@@ -24,10 +21,7 @@ export async function onRequest(context) {
 
     if (!env.GAS_WEBAPP_URL || !env.ACCOQUEST_API_KEY) {
         return Response.json(
-            {
-                ok: false,
-                error: "Cloudflare environment variables belum ditetapkan."
-            },
+            { ok: false, error: "Cloudflare environment variables belum ditetapkan." },
             { status: 500, headers: cors }
         );
     }
@@ -50,9 +44,7 @@ export async function onRequest(context) {
 
         const upstream = await fetch(env.GAS_WEBAPP_URL, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 action: body.action,
                 data: body.data,
@@ -85,10 +77,7 @@ export async function onRequest(context) {
                 ok: false,
                 error: error.message || "Internal server error."
             },
-            {
-                status: 500,
-                headers: cors
-            }
+            { status: 500, headers: cors }
         );
     }
 }
