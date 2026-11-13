@@ -1,178 +1,1048 @@
-const $=id=>document.getElementById(id);
-let playerId=localStorage.getItem('aq_player_id')||('P'+Math.random().toString(36).slice(2)+Date.now().toString(36));
-let playerName=localStorage.getItem('aq_player_name')||'';
-let lobbyId=localStorage.getItem('aq_lobby_id')||'';
-const forceHome=new URLSearchParams(location.search).get('home')==='1';
-if(forceHome){localStorage.removeItem('aq_lobby_id');lobbyId='';history.replaceState(null,'','/');}
-let state=null,activeQuestion=null,selectedAnswer=null,pollTimer=null,countdown=null,seconds=30,spinBusy=false;
-let questionLoading=false;
-let urlQuestionId=new URLSearchParams(location.search).get('qid');
-let urlQuestionLoaded=false;
-localStorage.setItem('aq_player_id',playerId);
-$('username').value=playerName;
-$('usernameHome').value=playerName;
-const pages=['home','lobby','game','result'];
-function show(id){pages.forEach(x=>$(x).classList.toggle('hidden',x!==id));$('menuHomeBtn').classList.toggle('hidden',id==='home');}
-function renderLobbySkeleton(){ $('lobbyCode').classList.add('skeleton');$('lobbyCode').textContent='------';$('playerCount').classList.add('skeleton');$('playersList').innerHTML='<div class="skeleton-card"></div><div class="skeleton-card"></div>'; }
-function clearLobbySkeleton(){ $('lobbyCode').classList.remove('skeleton');$('playerCount').classList.remove('skeleton');}
-function renderGame(){
-  const g=state.game;
-  if(!g)return;
+/* =========================================================
+   ACCOQUEST - Frontend Game Controller
+   Backend: Cloudflare Pages Function -> Google Apps Script
+   ========================================================= */
 
-  $('roundLabel').textContent=`ROUND ${g.round} / ${g.totalRounds}`;
-  $('turnPlayer').textContent=g.currentPlayerName||'—';
-  $('scanState').textContent=g.phase.toUpperCase();
+/* -----------------------------
+   1. DOM HELPERS & PLAYER DATA
+----------------------------- */
 
-  const mine=g.isMyTurn;
+const $ = (id) => document.getElementById(id);
 
-  $('scanBtn').disabled=!mine||g.phase!=='question';
-  $('manualBtn').disabled=!mine||g.phase!=='question';
+const playerId =
+    localStorage.getItem("aq_player_id") ||
+    `P${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
 
-  $('blockPanel').classList.toggle('hidden',!mine||g.phase!=='block');
-  $('spinPanel').classList.toggle('hidden',!mine||g.phase!=='spin');
+let playerName = localStorage.getItem("aq_player_name") || "";
+let lobbyId = localStorage.getItem("aq_lobby_id") || "";
 
-  renderLeaderboard();
+const params = new URLSearchParams(window.location.search);
+const forceHome = params.get("home") === "1";
 
-  if(mine && g.phase==='question'){
+if (forceHome) {
+    localStorage.removeItem("aq_lobby_id");
+    lobbyId = "";
+    window.history.replaceState(null, "", "/");
+}
 
-    if(questionLoading){
-      $('scanArea').classList.add('hidden');
-      $('questionBox').classList.remove('hidden');
+localStorage.setItem("aq_player_id", playerId);
+
+const pages = ["home", "lobby", "game", "result"];
+
+let state = null;
+let activeQuestion = null;
+let selectedAnswer = null;
+let pollTimer = null;
+let countdown = null;
+let seconds = 30;
+let spinBusy = false;
+let questionLoading = false;
+let urlQuestionId = params.get("qid");
+let urlQuestionLoaded = false;
+let isSubmitting = false;
+
+$("username").value = playerName;
+$("usernameHome").value = playerName;
+
+
+/* -----------------------------
+   2. GENERAL UI HELPERS
+----------------------------- */
+
+function show(pageId) {
+    pages.forEach((page) => {
+        $(page).classList.toggle("hidden", page !== pageId);
+    });
+
+    const menuButton = $("menuHomeBtn");
+
+    if (menuButton) {
+        menuButton.classList.toggle("hidden", pageId === "home");
     }
-    else if(activeQuestion){
-      $('scanArea').classList.add('hidden');
-      $('questionBox').classList.remove('hidden');
+}
+
+function toast(message) {
+    const element = $("toast");
+
+    element.textContent = message;
+    element.classList.remove("hidden");
+
+    clearTimeout(toast.timer);
+
+    toast.timer = setTimeout(() => {
+        element.classList.add("hidden");
+    }, 3500);
+}
+
+function escapeHTML(value = "") {
+    return String(value).replace(/[&<>"']/g, (character) => {
+        const entities = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;"
+        };
+
+        return entities[character];
+    });
+}
+
+function setButtonLoading(button, loadingText, originalText, isLoading) {
+    button.disabled = isLoading;
+    button.textContent = isLoading ? loadingText : originalText;
+}
+
+function stopGameTimers() {
+    clearInterval(pollTimer);
+    clearInterval(countdown);
+
+    pollTimer = null;
+    countdown = null;
+}
+
+
+/* -----------------------------
+   3. SKELETON LOADING
+----------------------------- */
+
+function renderLobbySkeleton() {
+    $("lobbyCode").classList.add("skeleton");
+    $("lobbyCode").textContent = "------";
+
+    $("playerCount").classList.add("skeleton");
+    $("playersList").innerHTML = `
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+    `;
+}
+
+function clearLobbySkeleton() {
+    $("lobbyCode").classList.remove("skeleton");
+    $("playerCount").classList.remove("skeleton");
+}
+
+function renderQuestionSkeleton() {
+    questionLoading = true;
+
+    $("scanArea").classList.add("hidden");
+    $("questionBox").classList.remove("hidden");
+
+    $("qId").textContent = "";
+    $("qCategory").textContent = "";
+
+    $("qText").classList.add("skeleton-question");
+    $("qText").textContent = " ";
+
+    $("answers").innerHTML = `
+        <div class="skeleton-answer"></div>
+        <div class="skeleton-answer"></div>
+        <div class="skeleton-answer"></div>
+        <div class="skeleton-answer"></div>
+    `;
+
+    $("submitAnswer").disabled = true;
+}
+
+
+/* -----------------------------
+   4. BACKEND API
+----------------------------- */
+
+async function gas(action, data = {}) {
+    const response = await fetch("/api/game", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            action,
+            data
+        })
+    });
+
+    let payload;
+
+    try {
+        payload = await response.json();
+    } catch (error) {
+        throw new Error("Server returned an invalid response.");
     }
-    else{
-      $('scanArea').classList.remove('hidden');
-      $('questionBox').classList.add('hidden');
+
+    if (!response.ok || payload.ok === false) {
+        throw new Error(
+            payload.error || `API error ${response.status}`
+        );
     }
 
-  } else {
-    $('scanArea').classList.add('hidden');
-    $('questionBox').classList.add('hidden');
-  }
+    return Object.prototype.hasOwnProperty.call(payload, "data")
+        ? payload.data
+        : payload;
+}
 
-  if(mine&&g.phase==='block')renderBlocks();
-
-  if(g.lastResult&&g.lastResult.playerId===playerId&&g.phase!=='question'){
-    $('answerFeedback').textContent=
-      g.lastResult.correct
-      ?'BETUL! Jawapan tepat.'
-      :'SALAH. Jawapan tidak tepat.';
-
-    $('answerFeedback').className=
-      'feedback '+(g.lastResult.correct?'correct':'wrong');
-
-    $('answerFeedback').classList.remove('hidden');
-  }
-}
-function toast(msg){const el=$('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.add('hidden'),3500);}
-async function gas(name,data){
- const response=await fetch('/api/game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:name,data})});
- const payload=await response.json();
- if(!response.ok || payload.ok===false) throw new Error(payload.error||('API error '+response.status));
- return Object.prototype.hasOwnProperty.call(payload,'data')?payload.data:payload;
-}
-async function act(name,data){try{return await gas(name,data);}catch(e){toast(e.message);throw e;}}
-function nameInput(){const homeVisible=!$('home').classList.contains('hidden');const field=homeVisible?$('usernameHome'):$('username');const n=field.value.trim();if(n.length<2){toast('Username minimum 2 aksara.');field.focus();return false;}playerName=n;$('username').value=n;$('usernameHome').value=n;localStorage.setItem('aq_player_name',n);return true;}
-function startPolling(){clearInterval(pollTimer);poll();pollTimer=setInterval(poll,1800);}
-async function poll(){if(!lobbyId)return;try{state=await gas('getGameState',{lobbyId,playerId});renderState();
- if(urlQuestionId && !urlQuestionLoaded && state.game?.isMyTurn && state.game.phase==='question'){urlQuestionLoaded=true;loadQuestion(urlQuestionId).catch(()=>{urlQuestionLoaded=false;});}}catch(e){toast(e.message);clearInterval(pollTimer);}}
-function renderState(){
- if(!state)return;
- if(state.status==='waiting'){show('lobby');renderLobby();}
- else if(state.status==='playing'){show('game');renderGame();}
- else if(state.status==='finished'){show('result');renderFinal();}
-}
-function renderLobby(){
- clearLobbySkeleton();$('lobbyCode').textContent=state.lobbyId;$('playerCount').textContent=state.players.length+'/4';
- $('playersList').innerHTML=state.players.map(p=>`<div class="player-card"><div><div class="player-name">${esc(p.name)} ${p.host?'(HOST)':''}</div><div class="player-sub">${p.ready?'Ready to play':'Waiting for ready'}</div></div><span class="${p.ready?'ready-tag':'wait-tag'}">${p.ready?'● READY':'○ NOT READY'}</span></div>`).join('');
- const all=state.players.length>=2&&state.players.length<=4&&state.players.every(p=>p.ready);
- $('readyBtn').disabled=!state.me;$('readyBtn').textContent=state.me&&state.me.ready?'NOT READY':'READY';
- $('startBtn').classList.toggle('hidden',state.hostId!==playerId);$('startBtn').disabled=state.hostId!==playerId||!all;
- $('lobbyHint').textContent=state.players.length<2?'Menunggu sekurang-kurangnya 2 pemain.':all?'Semua pemain bersedia. Host boleh mula.':'Pastikan semua pemain menekan READY.';
-}
-function renderGame(){
- const g=state.game;if(!g)return;
- $('roundLabel').textContent=`ROUND ${g.round} / ${g.totalRounds}`;$('turnPlayer').textContent=g.currentPlayerName||'—';
- $('scanState').textContent=g.phase.toUpperCase();
- const mine=g.isMyTurn;
- $('scanBtn').disabled=!mine||g.phase!=='question';$('manualBtn').disabled=!mine||g.phase!=='question';
- $('blockPanel').classList.toggle('hidden',!mine||g.phase!=='block');
- $('spinPanel').classList.toggle('hidden',!mine||g.phase!=='spin');
- renderLeaderboard();
- if(mine&&g.phase==='question'){$('scanArea').classList.remove('hidden');$('questionBox').classList.add('hidden');}
- else if(!mine||g.phase!=='question'){$('scanArea').classList.add('hidden');}
- if(mine&&g.phase==='block')renderBlocks();
- if(g.lastResult&&g.lastResult.playerId===playerId&&g.phase!=='question'){
-  $('answerFeedback').textContent=g.lastResult.correct?'BETUL! Jawapan tepat.':'SALAH. Jawapan tidak tepat.';
-  $('answerFeedback').className='feedback '+(g.lastResult.correct?'correct':'wrong');$('answerFeedback').classList.remove('hidden');
- }
-}
-function renderLeaderboard(){
- const rows=state.game.scores||[];
- $('leaderboardRows').innerHTML=rows.map((p,i)=>`<div class="rank-row"><div class="rank-no">#${i+1}</div><div><div class="rank-name">${esc(p.name)}</div><div class="rank-stats">✓ ${p.correct} &nbsp; ✕ ${p.wrong}</div></div><div class="rank-score">${p.points}</div></div>`).join('');
-}
-function renderBlocks(){
- const used=state.game.usedBlocks||[];
- $('blocks').innerHTML=['A','B','C','D','E','F'].map(x=>`<button class="block" ${used.includes(x)?'disabled':''} data-block="${x}">${x}</button>`).join('');
- document.querySelectorAll('.block:not(:disabled)').forEach(b=>b.onclick=async()=>{await act('chooseBlock',{lobbyId,playerId,block:b.dataset.block});poll();});
-}
-function renderFinal(){
- const rows=(state.game?.scores||[]);$('winnerBanner').innerHTML=`CHAMPION<strong>${esc(rows[0]?.name||'—')}</strong><span>${rows[0]?.points||0} POINTS</span>`;
- $('finalRows').innerHTML=rows.slice(0,3).map((p,i)=>`<div class="final-row"><strong>${['🥇','🥈','🥉'][i]} ${esc(p.name)}</strong><span>${p.points} pts</span></div>`).join('');
-}
-function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-$('createBtn').onclick=async()=>{if(!nameInput())return;const btn=$('createBtn');btn.disabled=true;btn.textContent='CREATING LOBBY...';show('lobby');renderLobbySkeleton();try{state=await act('createLobby',{playerId,name:playerName});lobbyId=state.lobbyId;localStorage.setItem('aq_lobby_id',lobbyId);renderState();startPolling();}catch(e){show('home');}finally{btn.disabled=false;btn.textContent='CREATE LOBBY';}};
-$('joinBtn').onclick=async()=>{if(!nameInput())return;const code=$('joinCode').value.trim();if(!/^\d{6}$/.test(code))return toast('Masukkan kod tepat 6 digit.');const btn=$('joinBtn');btn.disabled=true;btn.textContent='JOINING...';show('lobby');renderLobbySkeleton();try{state=await act('joinLobby',{lobbyId:code,playerId,name:playerName});lobbyId=code;localStorage.setItem('aq_lobby_id',lobbyId);renderState();startPolling();}catch(e){show('home');}finally{btn.disabled=false;btn.textContent='JOIN';}};
-$('saveName').onclick=()=>{if(nameInput())toast('Username disimpan.');};
-$('copyCode').onclick=()=>navigator.clipboard?.writeText(lobbyId).then(()=>toast('Kod lobby disalin.'));
-$('readyBtn').onclick=async()=>{const me=state.players.find(p=>p.playerId===playerId);state=await act('setReady',{lobbyId,playerId,ready:!me.ready});renderLobby();};
-$('startBtn').onclick=async()=>{const r=Number(prompt('Jumlah pusingan (1–20):','3')||3);if(!Number.isInteger(r)||r<1||r>20)return toast('Pusingan mesti 1 hingga 20.');state=await act('startGame',{lobbyId,playerId,totalRounds:r});renderState();};
-$('manualBtn').onclick=()=>loadQuestion($('questionId').value.trim());
-$('scanBtn').onclick=scanNfc;
-async function scanNfc(){
- if(!('NDEFReader' in window)){toast('Web NFC tidak disokong pada browser/peranti ini. Gunakan kad NFC URL atau masukkan ID manual.');return;}
- try{
-  const reader=new NDEFReader();
-  await reader.scan();
-  toast('NFC aktif. Sentuhkan kad pada telefon.');
-  reader.onreading=event=>{
-   for(const record of event.message.records){
-    if(record.recordType==='text'){
-     const bytes=new Uint8Array(record.data);const langLength=bytes[0]&0x3f;const enc=(bytes[0]&0x80)?'utf-16':'utf-8';
-     const id=new TextDecoder(enc).decode(bytes.slice(1+langLength)).trim();if(id)loadQuestion(id);return;
+async function act(action, data = {}) {
+    try {
+        return await gas(action, data);
+    } catch (error) {
+        toast(error.message || "Something went wrong.");
+        throw error;
     }
-    if(record.recordType==='url'){
-     const bytes=new Uint8Array(record.data);const prefix=['','http://www.','https://www.','http://','https://'][bytes[0]]||'';
-     const url=prefix+new TextDecoder().decode(bytes.slice(1));
-     try{const id=new URL(url).searchParams.get('qid');if(id){loadQuestion(id);return;}}catch(e){}
+}
+
+
+/* -----------------------------
+   5. PLAYER IDENTITY
+----------------------------- */
+
+function nameInput() {
+    const homeVisible = !$("home").classList.contains("hidden");
+    const input = homeVisible
+        ? $("usernameHome")
+        : $("username");
+
+    const name = input.value.trim();
+
+    if (name.length < 2) {
+        toast("Username minimum 2 aksara.");
+        input.focus();
+        return false;
     }
-   }
-  };
- }catch(e){toast('NFC gagal dimulakan: '+e.message);}
+
+    playerName = name;
+
+    $("username").value = name;
+    $("usernameHome").value = name;
+
+    localStorage.setItem("aq_player_name", name);
+
+    return true;
 }
 
-async function loadQuestion(id){
- if(!id)return toast('Masukkan Question ID.');renderQuestionSkeleton();let q;try{q=await act('getQuestion',{lobbyId,playerId,questionId:id});}catch(e){$('questionBox').classList.add('hidden');$('scanArea').classList.remove('hidden');return;}activeQuestion=q;
-selectedAnswer=null;
-questionLoading=false;
- $('answers').innerHTML=q.options.map((v,i)=>`<button class="answer-option" data-answer="${'ABCD'[i]}"><b>${'ABCD'[i]}.</b> ${esc(v)}</button>`).join('');
- document.querySelectorAll('.answer-option').forEach(b=>b.onclick=()=>{selectedAnswer=b.dataset.answer;document.querySelectorAll('.answer-option').forEach(x=>x.classList.toggle('selected',x===b));$('submitAnswer').disabled=false;});
- $('answerFeedback').classList.add('hidden');$('submitAnswer').disabled=true;$('scanArea').classList.add('hidden');$('questionBox').classList.remove('hidden');
- seconds=30;$('timer').textContent='30s';clearInterval(countdown);countdown=setInterval(()=>{seconds--;$('timer').textContent=seconds+'s';if(seconds<=0){clearInterval(countdown);submit('TIMEOUT');}},1000);
-}
-async function submit(answer){clearInterval(countdown);$('submitAnswer').disabled=true;const res=await act('submitAnswer',{lobbyId,playerId,questionId:activeQuestion.id,answer});$('answerFeedback').textContent=res.correct?'BETUL! Jawapan tepat.':'SALAH. Jawapan tidak tepat.';$('answerFeedback').className='feedback '+(res.correct?'correct':'wrong');$('answerFeedback').classList.remove('hidden');poll();}
-$('submitAnswer').onclick=()=>{if(!selectedAnswer)return toast('Pilih jawapan dahulu.');submit(selectedAnswer);};
-$('spinBtn').onclick=async()=>{
- if(spinBusy)return;spinBusy=true;$('spinBtn').disabled=true;
- try{const res=await act('spinPoints',{lobbyId,playerId});const deg=1440+Math.floor(Math.random()*720);$('wheel').style.transform=`rotate(${deg}deg)`;setTimeout(()=>{$('spinResult').textContent=(res.points>0?'+':'')+res.points+' POINTS';$('spinResult').classList.remove('hidden');spinBusy=false;poll();},4100);}
- catch(e){spinBusy=false;$('spinBtn').disabled=false;}
-};
-$('playAgain').onclick=async()=>{state=await act('resetGame',{lobbyId,playerId});renderState();startPolling();};
-$('backLobby').onclick=()=>{renderState();startPolling();};
-if(lobbyId){show('lobby');renderLobbySkeleton();gas('getGameState',{lobbyId,playerId}).then(s=>{state=s;renderState();startPolling();}).catch(()=>{localStorage.removeItem('aq_lobby_id');lobbyId='';clearLobbySkeleton();show('home');});}
 
-// Return to the initial menu: clear the remembered lobby and force a fresh page load.
-$('menuHomeBtn').addEventListener('click',event=>{event.preventDefault();clearInterval(pollTimer);clearInterval(countdown);localStorage.removeItem('aq_lobby_id');lobbyId='';window.location.href='/?home=1&refresh='+Date.now();});
+/* -----------------------------
+   6. GAME STATE & POLLING
+----------------------------- */
+
+function startPolling() {
+    clearInterval(pollTimer);
+
+    poll();
+    pollTimer = setInterval(poll, 1800);
+}
+
+async function poll() {
+    if (!lobbyId) {
+        return;
+    }
+
+    try {
+        state = await gas("getGameState", {
+            lobbyId,
+            playerId
+        });
+
+        renderState();
+
+        if (
+            urlQuestionId &&
+            !urlQuestionLoaded &&
+            state.game?.isMyTurn &&
+            state.game.phase === "question"
+        ) {
+            urlQuestionLoaded = true;
+
+            loadQuestion(urlQuestionId).catch(() => {
+                urlQuestionLoaded = false;
+            });
+        }
+    } catch (error) {
+        toast(error.message);
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+}
+
+function renderState() {
+    if (!state) {
+        return;
+    }
+
+    if (state.status === "waiting") {
+        show("lobby");
+        renderLobby();
+        return;
+    }
+
+    if (state.status === "playing") {
+        show("game");
+        renderGame();
+        return;
+    }
+
+    if (state.status === "finished") {
+        show("result");
+        renderFinal();
+    }
+}
+
+
+/* -----------------------------
+   7. LOBBY RENDERING
+----------------------------- */
+
+function renderLobby() {
+    clearLobbySkeleton();
+
+    $("lobbyCode").textContent = state.lobbyId;
+    $("playerCount").textContent = `${state.players.length}/4`;
+
+    $("playersList").innerHTML = state.players.map((player) => `
+        <div class="player-card">
+            <div>
+                <div class="player-name">
+                    ${escapeHTML(player.name)}
+                    ${player.host ? "(HOST)" : ""}
+                </div>
+
+                <div class="player-sub">
+                    ${player.ready ? "Ready to play" : "Waiting for ready"}
+                </div>
+            </div>
+
+            <span class="${player.ready ? "ready-tag" : "wait-tag"}">
+                ${player.ready ? "● READY" : "○ NOT READY"}
+            </span>
+        </div>
+    `).join("");
+
+    const allPlayersReady =
+        state.players.length >= 2 &&
+        state.players.length <= 4 &&
+        state.players.every((player) => player.ready);
+
+    $("readyBtn").disabled = !state.me;
+    $("readyBtn").textContent =
+        state.me && state.me.ready ? "NOT READY" : "READY";
+
+    const isHost = state.hostId === playerId;
+
+    $("startBtn").classList.toggle("hidden", !isHost);
+    $("startBtn").disabled = !isHost || !allPlayersReady;
+
+    if (state.players.length < 2) {
+        $("lobbyHint").textContent =
+            "Menunggu sekurang-kurangnya 2 pemain.";
+    } else if (allPlayersReady) {
+        $("lobbyHint").textContent =
+            "Semua pemain bersedia. Host boleh mula.";
+    } else {
+        $("lobbyHint").textContent =
+            "Pastikan semua pemain menekan READY.";
+    }
+}
+
+
+/* -----------------------------
+   8. GAME SCREEN RENDERING
+----------------------------- */
+
+function renderGame() {
+    const game = state?.game;
+
+    if (!game) {
+        return;
+    }
+
+    $("roundLabel").textContent =
+        `ROUND ${game.round} / ${game.totalRounds}`;
+
+    $("turnPlayer").textContent =
+        game.currentPlayerName || "—";
+
+    $("scanState").textContent =
+        String(game.phase || "waiting").toUpperCase();
+
+    const isMyTurn = Boolean(game.isMyTurn);
+    const isQuestionPhase = game.phase === "question";
+    const isBlockPhase = game.phase === "block";
+    const isSpinPhase = game.phase === "spin";
+
+    $("scanBtn").disabled = !isMyTurn || !isQuestionPhase;
+    $("manualBtn").disabled = !isMyTurn || !isQuestionPhase;
+
+    $("blockPanel").classList.toggle(
+        "hidden",
+        !isMyTurn || !isBlockPhase
+    );
+
+    $("spinPanel").classList.toggle(
+        "hidden",
+        !isMyTurn || !isSpinPhase
+    );
+
+    renderLeaderboard();
+
+    if (isMyTurn && isQuestionPhase) {
+        const hasQuestionInProgress =
+            questionLoading || Boolean(activeQuestion);
+
+        $("scanArea").classList.toggle(
+            "hidden",
+            hasQuestionInProgress
+        );
+
+        $("questionBox").classList.toggle(
+            "hidden",
+            !hasQuestionInProgress
+        );
+    } else {
+        $("scanArea").classList.add("hidden");
+        $("questionBox").classList.add("hidden");
+
+        if (!isQuestionPhase) {
+            activeQuestion = null;
+            questionLoading = false;
+        }
+    }
+
+    if (isMyTurn && isBlockPhase) {
+        renderBlocks();
+    }
+
+    if (
+        game.lastResult &&
+        game.lastResult.playerId === playerId &&
+        game.phase !== "question"
+    ) {
+        $("answerFeedback").textContent = game.lastResult.correct
+            ? "BETUL! Jawapan tepat."
+            : "SALAH. Jawapan tidak tepat.";
+
+        $("answerFeedback").className =
+            `feedback ${game.lastResult.correct ? "correct" : "wrong"}`;
+
+        $("answerFeedback").classList.remove("hidden");
+    }
+}
+
+
+/* -----------------------------
+   9. LEADERBOARD
+----------------------------- */
+
+function renderLeaderboard() {
+    const scores = state?.game?.scores || [];
+
+    $("leaderboardRows").innerHTML = scores.map((player, index) => `
+        <div class="rank-row">
+            <div class="rank-no">#${index + 1}</div>
+
+            <div>
+                <div class="rank-name">
+                    ${escapeHTML(player.name)}
+                </div>
+
+                <div class="rank-stats">
+                    ✓ ${player.correct}
+                    &nbsp; ✕ ${player.wrong}
+                </div>
+            </div>
+
+            <div class="rank-score">
+                ${player.points}
+            </div>
+        </div>
+    `).join("");
+}
+
+
+/* -----------------------------
+   10. BLOCK SELECTION
+----------------------------- */
+
+function renderBlocks() {
+    const usedBlocks = state?.game?.usedBlocks || [];
+    const availableBlocks = ["A", "B", "C", "D", "E", "F"];
+
+    $("blocks").innerHTML = availableBlocks.map((block) => `
+        <button
+            class="block"
+            type="button"
+            data-block="${block}"
+            ${usedBlocks.includes(block) ? "disabled" : ""}
+        >
+            ${block}
+        </button>
+    `).join("");
+
+    document.querySelectorAll(".block:not(:disabled)").forEach((button) => {
+        button.addEventListener("click", async () => {
+            button.disabled = true;
+
+            try {
+                await act("chooseBlock", {
+                    lobbyId,
+                    playerId,
+                    block: button.dataset.block
+                });
+
+                await poll();
+            } catch (error) {
+                button.disabled = false;
+            }
+        });
+    });
+}
+
+
+/* -----------------------------
+   11. FINAL RESULTS
+----------------------------- */
+
+function renderFinal() {
+    const scores = state?.game?.scores || [];
+    const winner = scores[0];
+
+    $("winnerBanner").innerHTML = `
+        CHAMPION
+        <strong>${escapeHTML(winner?.name || "—")}</strong>
+        <span>${winner?.points || 0} POINTS</span>
+    `;
+
+    $("finalRows").innerHTML = scores.slice(0, 3).map((player, index) => {
+        const medals = ["🥇", "🥈", "🥉"];
+
+        return `
+            <div class="final-row">
+                <strong>
+                    ${medals[index]} ${escapeHTML(player.name)}
+                </strong>
+
+                <span>${player.points} pts</span>
+            </div>
+        `;
+    }).join("");
+}
+
+
+/* -----------------------------
+   12. QUESTION LOADING
+----------------------------- */
+
+async function loadQuestion(questionId) {
+    const id = String(questionId || "").trim();
+
+    if (!id) {
+        toast("Masukkan Question ID.");
+        return;
+    }
+
+    if (questionLoading) {
+        return;
+    }
+
+    questionLoading = true;
+    renderQuestionSkeleton();
+
+    try {
+        const question = await act("getQuestion", {
+            lobbyId,
+            playerId,
+            questionId: id
+        });
+
+        if (!question) {
+            throw new Error("Soalan tidak dijumpai.");
+        }
+
+        const options = question.options || [
+            question.optionA,
+            question.optionB,
+            question.optionC,
+            question.optionD
+        ];
+
+        if (!Array.isArray(options) || options.length === 0) {
+            throw new Error(
+                "Pilihan jawapan tidak diterima daripada server."
+            );
+        }
+
+        activeQuestion = {
+            ...question,
+            id: question.id || question.questionId || id,
+            options
+        };
+
+        selectedAnswer = null;
+        questionLoading = false;
+
+        $("qId").textContent = activeQuestion.id;
+        $("qCategory").textContent = activeQuestion.category || "";
+        $("qText").classList.remove("skeleton-question");
+        $("qText").textContent =
+            activeQuestion.text || activeQuestion.question || "";
+
+        $("answers").innerHTML = options.map((option, index) => `
+            <button
+                class="answer-option"
+                type="button"
+                data-answer="${"ABCD"[index]}"
+            >
+                <b>${"ABCD"[index]}.</b>
+                ${escapeHTML(option)}
+            </button>
+        `).join("");
+
+        document.querySelectorAll(".answer-option").forEach((button) => {
+            button.addEventListener("click", () => {
+                selectedAnswer = button.dataset.answer;
+
+                document.querySelectorAll(".answer-option").forEach((item) => {
+                    item.classList.toggle("selected", item === button);
+                });
+
+                $("submitAnswer").disabled = false;
+            });
+        });
+
+        $("answerFeedback").classList.add("hidden");
+        $("submitAnswer").disabled = true;
+
+        $("scanArea").classList.add("hidden");
+        $("questionBox").classList.remove("hidden");
+
+        seconds = 30;
+        $("timer").textContent = `${seconds}s`;
+
+        clearInterval(countdown);
+
+        countdown = setInterval(() => {
+            seconds -= 1;
+            $("timer").textContent = `${seconds}s`;
+
+            if (seconds <= 0) {
+                clearInterval(countdown);
+                submitAnswer("TIMEOUT");
+            }
+        }, 1000);
+
+    } catch (error) {
+        questionLoading = false;
+        activeQuestion = null;
+
+        $("qText").classList.remove("skeleton-question");
+        $("questionBox").classList.add("hidden");
+        $("scanArea").classList.remove("hidden");
+
+        toast(error.message || "Gagal memuatkan soalan.");
+    }
+}
+
+
+/* -----------------------------
+   13. NFC SCANNER
+----------------------------- */
+
+$("scanBtn").addEventListener("click", scanNfc);
+
+async function scanNfc() {
+    if (!("NDEFReader" in window)) {
+        toast(
+            "Web NFC tidak disokong pada peranti ini. " +
+            "Gunakan NFC URL atau masukkan ID secara manual."
+        );
+        return;
+    }
+
+    try {
+        const reader = new NDEFReader();
+
+        await reader.scan();
+
+        toast("NFC aktif. Sentuhkan kad pada telefon.");
+
+        reader.onreading = (event) => {
+            for (const record of event.message.records) {
+                if (record.recordType === "text") {
+                    const bytes = new Uint8Array(record.data);
+                    const languageLength = bytes[0] & 0x3f;
+                    const encoding = (bytes[0] & 0x80)
+                        ? "utf-16"
+                        : "utf-8";
+
+                    const questionId = new TextDecoder(encoding)
+                        .decode(bytes.slice(1 + languageLength))
+                        .trim();
+
+                    if (questionId) {
+                        loadQuestion(questionId);
+                    }
+
+                    return;
+                }
+
+                if (record.recordType === "url") {
+                    const bytes = new Uint8Array(record.data);
+
+                    const prefixes = [
+                        "",
+                        "http://www.",
+                        "https://www.",
+                        "http://",
+                        "https://"
+                    ];
+
+                    const prefix = prefixes[bytes[0]] || "";
+                    const url = prefix +
+                        new TextDecoder().decode(bytes.slice(1));
+
+                    try {
+                        const questionId =
+                            new URL(url).searchParams.get("qid");
+
+                        if (questionId) {
+                            loadQuestion(questionId);
+                            return;
+                        }
+                    } catch (error) {
+                        toast("Format URL NFC tidak sah.");
+                    }
+                }
+            }
+        };
+
+    } catch (error) {
+        toast(`NFC gagal dimulakan: ${error.message}`);
+    }
+}
+
+
+/* -----------------------------
+   14. ANSWER SUBMISSION
+----------------------------- */
+
+async function submitAnswer(answer) {
+    if (!activeQuestion || isSubmitting) {
+        return;
+    }
+
+    isSubmitting = true;
+    clearInterval(countdown);
+
+    $("submitAnswer").disabled = true;
+
+    try {
+        const result = await act("submitAnswer", {
+            lobbyId,
+            playerId,
+            questionId: activeQuestion.id,
+            answer
+        });
+
+        $("answerFeedback").textContent = result.correct
+            ? "BETUL! Jawapan tepat."
+            : "SALAH. Jawapan tidak tepat.";
+
+        $("answerFeedback").className =
+            `feedback ${result.correct ? "correct" : "wrong"}`;
+
+        $("answerFeedback").classList.remove("hidden");
+
+        await poll();
+
+    } catch (error) {
+        $("submitAnswer").disabled = false;
+    } finally {
+        isSubmitting = false;
+    }
+}
+
+$("submitAnswer").addEventListener("click", () => {
+    if (!selectedAnswer) {
+        toast("Pilih jawapan dahulu.");
+        return;
+    }
+
+    submitAnswer(selectedAnswer);
+});
+
+$("manualBtn").addEventListener("click", () => {
+    loadQuestion($("questionId").value.trim());
+});
+
+
+/* -----------------------------
+   15. CREATE & JOIN LOBBY
+----------------------------- */
+
+$("createBtn").addEventListener("click", async () => {
+    if (!nameInput()) {
+        return;
+    }
+
+    const button = $("createBtn");
+
+    setButtonLoading(
+        button,
+        "CREATING LOBBY...",
+        "CREATE LOBBY",
+        true
+    );
+
+    show("lobby");
+    renderLobbySkeleton();
+
+    try {
+        state = await act("createLobby", {
+            playerId,
+            name: playerName
+        });
+
+        lobbyId = state.lobbyId;
+
+        localStorage.setItem("aq_lobby_id", lobbyId);
+
+        renderState();
+        startPolling();
+
+    } catch (error) {
+        show("home");
+    } finally {
+        setButtonLoading(
+            button,
+            "CREATING LOBBY...",
+            "CREATE LOBBY",
+            false
+        );
+    }
+});
+
+$("joinBtn").addEventListener("click", async () => {
+    if (!nameInput()) {
+        return;
+    }
+
+    const code = $("joinCode").value.trim();
+
+    if (!/^\d{6}$/.test(code)) {
+        toast("Masukkan kod tepat 6 digit.");
+        return;
+    }
+
+    const button = $("joinBtn");
+
+    setButtonLoading(button, "JOINING...", "JOIN", true);
+
+    show("lobby");
+    renderLobbySkeleton();
+
+    try {
+        state = await act("joinLobby", {
+            lobbyId: code,
+            playerId,
+            name: playerName
+        });
+
+        lobbyId = code;
+
+        localStorage.setItem("aq_lobby_id", lobbyId);
+
+        renderState();
+        startPolling();
+
+    } catch (error) {
+        show("home");
+    } finally {
+        setButtonLoading(button, "JOINING...", "JOIN", false);
+    }
+});
+
+
+/* -----------------------------
+   16. LOBBY CONTROLS
+----------------------------- */
+
+$("saveName").addEventListener("click", () => {
+    if (nameInput()) {
+        toast("Username disimpan.");
+    }
+});
+
+$("copyCode").addEventListener("click", async () => {
+    try {
+        await navigator.clipboard.writeText(lobbyId);
+        toast("Kod lobby disalin.");
+    } catch (error) {
+        toast("Tidak dapat menyalin kod lobby.");
+    }
+});
+
+$("readyBtn").addEventListener("click", async () => {
+    const me = state?.players?.find(
+        (player) => player.playerId === playerId
+    );
+
+    if (!me) {
+        return;
+    }
+
+    try {
+        state = await act("setReady", {
+            lobbyId,
+            playerId,
+            ready: !me.ready
+        });
+
+        renderLobby();
+    } catch (error) {
+        // Error is displayed by act().
+    }
+});
+
+$("startBtn").addEventListener("click", async () => {
+    const rounds = Number(
+        prompt("Jumlah pusingan (1–20):", "3") || 3
+    );
+
+    if (!Number.isInteger(rounds) || rounds < 1 || rounds > 20) {
+        toast("Pusingan mesti 1 hingga 20.");
+        return;
+    }
+
+    try {
+        state = await act("startGame", {
+            lobbyId,
+            playerId,
+            totalRounds: rounds
+        });
+
+        renderState();
+        startPolling();
+    } catch (error) {
+        // Error is displayed by act().
+    }
+});
+
+
+/* -----------------------------
+   17. SPIN FOR POINTS
+----------------------------- */
+
+$("spinBtn").addEventListener("click", async () => {
+    if (spinBusy) {
+        return;
+    }
+
+    spinBusy = true;
+    $("spinBtn").disabled = true;
+    $("spinResult").classList.add("hidden");
+
+    try {
+        const result = await act("spinPoints", {
+            lobbyId,
+            playerId
+        });
+
+        const degrees = 1440 + Math.floor(Math.random() * 720);
+
+        $("wheel").style.transform = `rotate(${degrees}deg)`;
+
+        setTimeout(async () => {
+            $("spinResult").textContent =
+                `${result.points > 0 ? "+" : ""}${result.points} POINTS`;
+
+            $("spinResult").classList.remove("hidden");
+
+            spinBusy = false;
+            $("spinBtn").disabled = false;
+
+            await poll();
+        }, 4100);
+
+    } catch (error) {
+        spinBusy = false;
+        $("spinBtn").disabled = false;
+    }
+});
+
+
+/* -----------------------------
+   18. RESULTS & REPLAY
+----------------------------- */
+
+$("playAgain").addEventListener("click", async () => {
+    try {
+        state = await act("resetGame", {
+            lobbyId,
+            playerId
+        });
+
+        activeQuestion = null;
+        selectedAnswer = null;
+
+        renderState();
+        startPolling();
+    } catch (error) {
+        // Error is displayed by act().
+    }
+});
+
+$("backLobby").addEventListener("click", () => {
+    renderState();
+    startPolling();
+});
+
+
+/* -----------------------------
+   19. RETURN TO MAIN MENU
+----------------------------- */
+
+const menuHomeButton = $("menuHomeBtn");
+
+if (menuHomeButton) {
+    menuHomeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+
+        stopGameTimers();
+
+        localStorage.removeItem("aq_lobby_id");
+        lobbyId = "";
+
+        window.location.href = `/?home=1&refresh=${Date.now()}`;
+    });
+}
+
+
+/* -----------------------------
+   20. RESTORE PREVIOUS SESSION
+----------------------------- */
+
+async function restoreSession() {
+    if (!lobbyId) {
+        show("home");
+        return;
+    }
+
+    show("lobby");
+    renderLobbySkeleton();
+
+    try {
+        state = await gas("getGameState", {
+            lobbyId,
+            playerId
+        });
+
+        renderState();
+        startPolling();
+
+    } catch (error) {
+        localStorage.removeItem("aq_lobby_id");
+        lobbyId = "";
+
+        clearLobbySkeleton();
+        show("home");
+    }
+}
+
+restoreSession();
