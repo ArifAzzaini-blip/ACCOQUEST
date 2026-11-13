@@ -218,62 +218,35 @@ function submitAnswer(payload) {
   return withLock_(function() {
     const lobby = readLobby_(String(payload.lobbyId));
     const playerId = String(payload.playerId);
-    const qid = String(payload.questionId);
-    const answer = String(payload.answer || "").trim().toUpperCase();
+    const qid = String(payload.questionId).trim().toUpperCase();
+    const answer = String(payload.answer || '').trim().toUpperCase();
 
     validateTurn_(lobby, playerId);
 
     if (
-      lobby.game.phase !== "question" ||
-      lobby.game.activeQuestionId !== qid
+      lobby.game.phase !== 'question' ||
+      String(lobby.game.activeQuestionId).trim().toUpperCase() !== qid
     ) {
-      throw new Error("Soalan tidak sepadan atau giliran telah berubah.");
+      throw new Error('Soalan tidak sepadan atau giliran telah berubah.');
     }
 
     const sh = getDb_().getSheetByName(CONFIG.QUESTION_SHEET);
     const data = sh.getDataRange().getValues();
 
-    let correctAnswer = "";
-    let options = [];
+    let correctAnswer = '';
 
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]).trim() === qid) {
-        options = [
-          String(data[i][3]).trim(),
-          String(data[i][4]).trim(),
-          String(data[i][5]).trim(),
-          String(data[i][6]).trim()
-        ];
-
-        const storedAnswer = String(data[i][7]).trim();
-
-        // Jika skema menyimpan A/B/C/D.
-        if (/^[A-D]$/i.test(storedAnswer)) {
-          correctAnswer = storedAnswer.toUpperCase();
-        } else {
-          // Jika skema menyimpan teks jawapan.
-          const index = options.findIndex(
-            option => option.toLowerCase() === storedAnswer.toLowerCase()
-          );
-
-          if (index !== -1) {
-            correctAnswer = "ABCD"[index];
-          }
-        }
-
+      if (String(data[i][0]).trim().toUpperCase() === qid) {
+        correctAnswer = String(data[i][7]).trim().toUpperCase();
         break;
       }
     }
 
     if (!correctAnswer) {
-      throw new Error("Skema jawapan tidak sah. Semak Google Sheets.");
+      throw new Error('Skema jawapan tidak dijumpai dalam Google Sheets.');
     }
 
     const correct = answer === correctAnswer;
-
-    if (answer === "TIMEOUT") {
-      // Masa tamat dikira salah.
-    }
 
     if (correct) {
       lobby.game.scores[playerId].correct++;
@@ -289,18 +262,18 @@ function submitAnswer(payload) {
       questionId: qid
     };
 
-    lobby.game.phase = "block";
+    lobby.game.phase = 'block';
     lobby.game.activeQuestionId = null;
 
-    writeHistory_(lobby, qid, correct, "", 0);
+    writeHistory_(lobby, qid, correct, '', 0);
     writeLobby_(lobby);
 
     return {
-    correct: correct,
-    correctAnswer: correctAnswer,
-    nextPhase: "block"
-};
-});
+      correct: correct,
+      correctAnswer: correctAnswer,
+      nextPhase: 'block'
+    };
+  });
 }
 
 function chooseBlock(payload) {
