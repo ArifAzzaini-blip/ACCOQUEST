@@ -968,37 +968,33 @@ function setupWheelLabels() {
 
 
 // ANIMASI WHEEL
-async function spinWheelToPoints(points) {
+async function spinWheelToPoints(points, startAngle) {
     const wheel = $("wheel");
     const targetIndex = WHEEL_POINTS.indexOf(Number(points));
 
     if (!wheel) throw new Error("Wheel tidak dijumpai.");
     if (targetIndex === -1) {
-        throw new Error(`Nilai mata ${points} tiada pada Wheel.`);
+        throw new Error(`Nilai mata ${points} tidak sah.`);
     }
 
     const segmentCenter = targetIndex * 36 + 18;
-    const currentAngle = ((wheelRotation % 360) + 360) % 360;
+    const currentAngle = ((startAngle % 360) + 360) % 360;
+
     const alignment =
         (360 - ((segmentCenter + currentAngle) % 360)) % 360;
 
-    const startRotation = wheelRotation;
-    const endRotation = startRotation + (360 * 6) + alignment;
+    const endRotation = startAngle + 360 * 3 + alignment;
 
-    // Pastikan roda bermula pada kedudukan semasa
-    wheel.style.transform = `rotate(${startRotation}deg)`;
-
-    // Paksa browser mengemas kini kedudukan roda
+    wheel.style.transform = `rotate(${startAngle}deg)`;
     void wheel.offsetWidth;
 
-    // Jalankan animasi putaran
     const animation = wheel.animate(
         [
-            { transform: `rotate(${startRotation}deg)` },
+            { transform: `rotate(${startAngle}deg)` },
             { transform: `rotate(${endRotation}deg)` }
         ],
         {
-            duration: 4500,
+            duration: 1600,
             easing: "cubic-bezier(0.12, 0.75, 0.12, 1)",
             fill: "forwards"
         }
@@ -1007,27 +1003,37 @@ async function spinWheelToPoints(points) {
     await animation.finished;
 
     wheelRotation = endRotation;
-    wheel.style.transform = `rotate(${wheelRotation}deg)`;
+    wheel.style.transform = `rotate(${endRotation}deg)`;
     animation.cancel();
 }
 
-// Paparkan nombor mata.
 setupWheelLabels();
 
-
-// BUTANG SPIN
 $("spinBtn").addEventListener("click", async () => {
-
     if (spinBusy) return;
 
     spinBusy = true;
-
     $("spinBtn").disabled = true;
     $("spinResult").classList.add("hidden");
 
-    try {
+    const wheel = $("wheel");
+    const startAngle = wheelRotation;
 
-        // Dapatkan mata daripada Google Apps Script.
+    // Mulakan putaran serta-merta sementara menunggu server.
+    const fastSpin = wheel.animate(
+        [
+            { transform: `rotate(${startAngle}deg)` },
+            { transform: `rotate(${startAngle + 360}deg)` }
+        ],
+        {
+            duration: 1000,
+            iterations: Infinity,
+            easing: "linear"
+        }
+    );
+
+    try {
+        // Dapatkan keputusan daripada server.
         const result = await act("spinPoints", {
             lobbyId,
             playerId
@@ -1039,30 +1045,34 @@ $("spinBtn").addEventListener("click", async () => {
             throw new Error("Nilai mata tidak sah daripada server.");
         }
 
-        // Tunggu animasi roda selesai.
-        await spinWheelToPoints(points);
+        // Kira kedudukan semasa roda.
+        const elapsed = Number(fastSpin.currentTime || 0);
+        const currentAngle = startAngle + (360 * elapsed / 1000);
 
-        // Paparkan keputusan.
+        fastSpin.cancel();
+
+        wheelRotation = currentAngle;
+        wheel.style.transform = `rotate(${currentAngle}deg)`;
+
+        // Berhenti pada nombor mata yang dipilih server.
+        await spinWheelToPoints(points, currentAngle);
+
         $("spinResult").textContent =
             `${points > 0 ? "+" : ""}${points} POINTS`;
 
         $("spinResult").classList.remove("hidden");
 
-        // Beri masa untuk melihat keputusan.
-        await new Promise(resolve => {
-            setTimeout(resolve, 1800);
-        });
+        await new Promise(resolve => setTimeout(resolve, 1200));
 
         spinBusy = false;
         $("spinBtn").disabled = false;
 
-        // Kemas kini leaderboard dan giliran.
         await poll();
 
     } catch (error) {
+        fastSpin.cancel();
 
         spinBusy = false;
-
         $("spinBtn").disabled = false;
 
         toast(error.message || "Spin gagal.");
