@@ -2,6 +2,8 @@ const $=id=>document.getElementById(id);
 let playerId=localStorage.getItem('aq_player_id')||('P'+Math.random().toString(36).slice(2)+Date.now().toString(36));
 let playerName=localStorage.getItem('aq_player_name')||'';
 let lobbyId=localStorage.getItem('aq_lobby_id')||'';
+const forceHome=new URLSearchParams(location.search).get('home')==='1';
+if(forceHome){localStorage.removeItem('aq_lobby_id');lobbyId='';history.replaceState(null,'','/');}
 let state=null,activeQuestion=null,selectedAnswer=null,pollTimer=null,countdown=null,seconds=30,spinBusy=false;
 let urlQuestionId=new URLSearchParams(location.search).get('qid');
 let urlQuestionLoaded=false;
@@ -9,7 +11,10 @@ localStorage.setItem('aq_player_id',playerId);
 $('username').value=playerName;
 $('usernameHome').value=playerName;
 const pages=['home','lobby','game','result'];
-function show(id){pages.forEach(x=>$(x).classList.toggle('hidden',x!==id));}
+function show(id){pages.forEach(x=>$(x).classList.toggle('hidden',x!==id));$('menuHomeBtn').classList.toggle('hidden',id==='home');}
+function renderLobbySkeleton(){ $('lobbyCode').classList.add('skeleton');$('lobbyCode').textContent='------';$('playerCount').classList.add('skeleton');$('playersList').innerHTML='<div class="skeleton-card"></div><div class="skeleton-card"></div>'; }
+function clearLobbySkeleton(){ $('lobbyCode').classList.remove('skeleton');$('playerCount').classList.remove('skeleton');}
+function renderQuestionSkeleton(){ $('scanArea').classList.add('hidden');$('questionBox').classList.remove('hidden');$('qId').textContent='';$('qCategory').textContent='';$('qText').classList.add('skeleton-question');$('qText').textContent=' ';$('answers').innerHTML='<div class="skeleton-answer"></div><div class="skeleton-answer"></div><div class="skeleton-answer"></div><div class="skeleton-answer"></div>';$('submitAnswer').disabled=true;}
 function toast(msg){const el=$('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.add('hidden'),3500);}
 async function gas(name,data){
  const response=await fetch('/api/game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:name,data})});
@@ -29,7 +34,7 @@ function renderState(){
  else if(state.status==='finished'){show('result');renderFinal();}
 }
 function renderLobby(){
- $('lobbyCode').textContent=state.lobbyId;$('playerCount').textContent=state.players.length+'/4';
+ clearLobbySkeleton();$('lobbyCode').textContent=state.lobbyId;$('playerCount').textContent=state.players.length+'/4';
  $('playersList').innerHTML=state.players.map(p=>`<div class="player-card"><div><div class="player-name">${esc(p.name)} ${p.host?'(HOST)':''}</div><div class="player-sub">${p.ready?'Ready to play':'Waiting for ready'}</div></div><span class="${p.ready?'ready-tag':'wait-tag'}">${p.ready?'● READY':'○ NOT READY'}</span></div>`).join('');
  const all=state.players.length>=2&&state.players.length<=4&&state.players.every(p=>p.ready);
  $('readyBtn').disabled=!state.me;$('readyBtn').textContent=state.me&&state.me.ready?'NOT READY':'READY';
@@ -67,8 +72,8 @@ function renderFinal(){
  $('finalRows').innerHTML=rows.slice(0,3).map((p,i)=>`<div class="final-row"><strong>${['🥇','🥈','🥉'][i]} ${esc(p.name)}</strong><span>${p.points} pts</span></div>`).join('');
 }
 function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-$('createBtn').onclick=async()=>{if(!nameInput())return;state=await act('createLobby',{playerId,name:playerName});lobbyId=state.lobbyId;localStorage.setItem('aq_lobby_id',lobbyId);renderState();startPolling();};
-$('joinBtn').onclick=async()=>{if(!nameInput())return;const code=$('joinCode').value.trim();if(!/^\d{6}$/.test(code))return toast('Masukkan kod tepat 6 digit.');state=await act('joinLobby',{lobbyId:code,playerId,name:playerName});lobbyId=code;localStorage.setItem('aq_lobby_id',lobbyId);renderState();startPolling();};
+$('createBtn').onclick=async()=>{if(!nameInput())return;const btn=$('createBtn');btn.disabled=true;btn.textContent='CREATING LOBBY...';show('lobby');renderLobbySkeleton();try{state=await act('createLobby',{playerId,name:playerName});lobbyId=state.lobbyId;localStorage.setItem('aq_lobby_id',lobbyId);renderState();startPolling();}catch(e){show('home');}finally{btn.disabled=false;btn.textContent='CREATE LOBBY';}};
+$('joinBtn').onclick=async()=>{if(!nameInput())return;const code=$('joinCode').value.trim();if(!/^\d{6}$/.test(code))return toast('Masukkan kod tepat 6 digit.');const btn=$('joinBtn');btn.disabled=true;btn.textContent='JOINING...';show('lobby');renderLobbySkeleton();try{state=await act('joinLobby',{lobbyId:code,playerId,name:playerName});lobbyId=code;localStorage.setItem('aq_lobby_id',lobbyId);renderState();startPolling();}catch(e){show('home');}finally{btn.disabled=false;btn.textContent='JOIN';}};
 $('saveName').onclick=()=>{if(nameInput())toast('Username disimpan.');};
 $('copyCode').onclick=()=>navigator.clipboard?.writeText(lobbyId).then(()=>toast('Kod lobby disalin.'));
 $('readyBtn').onclick=async()=>{const me=state.players.find(p=>p.playerId===playerId);state=await act('setReady',{lobbyId,playerId,ready:!me.ready});renderLobby();};
@@ -98,8 +103,8 @@ async function scanNfc(){
 }
 
 async function loadQuestion(id){
- if(!id)return toast('Masukkan Question ID.');const q=await act('getQuestion',{lobbyId,playerId,questionId:id});activeQuestion=q;selectedAnswer=null;
- $('qId').textContent=q.id;$('qCategory').textContent=q.category;$('qText').textContent=q.text;
+ if(!id)return toast('Masukkan Question ID.');renderQuestionSkeleton();let q;try{q=await act('getQuestion',{lobbyId,playerId,questionId:id});}catch(e){$('questionBox').classList.add('hidden');$('scanArea').classList.remove('hidden');return;}activeQuestion=q;selectedAnswer=null;
+ $('qText').classList.remove('skeleton-question');$('qId').textContent=q.id;$('qCategory').textContent=q.category;$('qText').textContent=q.text;
  $('answers').innerHTML=q.options.map((v,i)=>`<button class="answer-option" data-answer="${'ABCD'[i]}"><b>${'ABCD'[i]}.</b> ${esc(v)}</button>`).join('');
  document.querySelectorAll('.answer-option').forEach(b=>b.onclick=()=>{selectedAnswer=b.dataset.answer;document.querySelectorAll('.answer-option').forEach(x=>x.classList.toggle('selected',x===b));$('submitAnswer').disabled=false;});
  $('answerFeedback').classList.add('hidden');$('submitAnswer').disabled=true;$('scanArea').classList.add('hidden');$('questionBox').classList.remove('hidden');
@@ -114,4 +119,7 @@ $('spinBtn').onclick=async()=>{
 };
 $('playAgain').onclick=async()=>{state=await act('resetGame',{lobbyId,playerId});renderState();startPolling();};
 $('backLobby').onclick=()=>{renderState();startPolling();};
-if(lobbyId){gas('getGameState',{lobbyId,playerId}).then(s=>{state=s;renderState();startPolling();}).catch(()=>{localStorage.removeItem('aq_lobby_id');lobbyId='';});}
+if(lobbyId){show('lobby');renderLobbySkeleton();gas('getGameState',{lobbyId,playerId}).then(s=>{state=s;renderState();startPolling();}).catch(()=>{localStorage.removeItem('aq_lobby_id');lobbyId='';clearLobbySkeleton();show('home');});}
+
+// Return to the initial menu: clear the remembered lobby and force a fresh page load.
+$('menuHomeBtn').addEventListener('click',event=>{event.preventDefault();clearInterval(pollTimer);clearInterval(countdown);localStorage.removeItem('aq_lobby_id');lobbyId='';window.location.href='/?home=1&refresh='+Date.now();});
