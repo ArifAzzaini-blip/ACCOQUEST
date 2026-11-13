@@ -967,40 +967,6 @@ function setupWheelLabels() {
 }
 
 
-function setupWheelLabels() {
-    const wheel = $("wheel");
-
-    if (!wheel) return;
-
-    let labels = wheel.querySelector(".wheel-labels");
-
-    if (!labels) {
-        labels = document.createElement("div");
-        labels.className = "wheel-labels";
-
-        wheel.insertBefore(
-            labels,
-            wheel.querySelector(".wheel-center")
-        );
-    }
-
-    labels.innerHTML = WHEEL_POINTS.map((points, index) => {
-        const angle = index * 36 + 18;
-        const value = points > 0 ? `+${points}` : String(points);
-
-        return `
-            <span
-                class="wheel-label"
-                style="
-                    --label-angle: ${angle}deg;
-                    --label-counter-angle: ${-angle}deg;
-                "
-            >${value}</span>
-        `;
-    }).join("");
-}
-
-
 // ANIMASI WHEEL
 async function spinWheelToPoints(points) {
     const wheel = $("wheel");
