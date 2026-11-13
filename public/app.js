@@ -776,17 +776,35 @@ async function submitAnswer(answer) {
         });
 
         // Paparkan keputusan.
-        $("answerFeedback").textContent = result.correct
-            ? "BETUL! Jawapan tepat."
-            : `SALAH! Jawapan yang betul ialah ${correctAnswer || "tidak diterima"}.`;
-
-        $("answerFeedback").className =
-            `feedback ${result.correct ? "correct" : "wrong"}`;
-
-        $("answerFeedback").classList.remove("hidden");
-
-        // Kekalkan keputusan selama 4 saat.
-        await new Promise(resolve => setTimeout(resolve, 4000));
+         if (result.correct) {
+             $("answerFeedback").textContent =
+                 "✓ JAWAPAN BETUL!\nTahniah! Jawapan anda tepat.";
+         
+             $("answerFeedback").className = "feedback correct";
+         
+         } else {
+             // Dapatkan teks jawapan yang betul daripada pilihan jawapan.
+             const correctOption = [...document.querySelectorAll(".answer-option")]
+                 .find(button => button.dataset.answer === correctAnswer);
+         
+             const correctText = correctOption
+                 ? correctOption.textContent.trim()
+                 : correctAnswer;
+         
+             $("answerFeedback").textContent =
+                 `✗ JAWAPAN SALAH!\n\n` +
+                 `Jawapan anda: ${answer}\n\n` +
+                 `PEMBETULAN JAWAPAN:\n` +
+                 `Jawapan yang betul ialah ${correctAnswer}.\n` +
+                 `${correctText}`;
+         
+             $("answerFeedback").className = "feedback wrong";
+         }
+         
+         $("answerFeedback").classList.remove("hidden");
+         
+         // Kekalkan keputusan selama 4 saat.
+         await new Promise(resolve => setTimeout(resolve, 4000));
 
     } catch (error) {
         console.error("SUBMIT ANSWER ERROR:", error);
