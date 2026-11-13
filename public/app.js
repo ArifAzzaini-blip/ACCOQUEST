@@ -726,6 +726,7 @@ async function scanNfc() {
    14. ANSWER SUBMISSION
 ----------------------------- */
 
+
 async function submitAnswer(answer) {
     if (!activeQuestion || isSubmitting) {
         return;
@@ -744,14 +745,39 @@ async function submitAnswer(answer) {
             answer
         });
 
+        const correctAnswer = String(
+            result.correctAnswer || ""
+        ).trim().toUpperCase();
+
+        // Paparkan warna pada setiap pilihan jawapan.
+        document.querySelectorAll(".answer-option").forEach((button) => {
+            const option = button.dataset.answer;
+
+            button.disabled = true;
+            button.classList.remove("selected");
+
+            if (option === correctAnswer) {
+                button.classList.add("answer-correct");
+            } else if (
+                option === String(answer).toUpperCase() &&
+                !result.correct
+            ) {
+                button.classList.add("answer-wrong");
+            }
+        });
+
+        // Paparkan maklum balas.
         $("answerFeedback").textContent = result.correct
             ? "BETUL! Jawapan tepat."
-            : "SALAH. Jawapan tidak tepat.";
+            : `SALAH! Jawapan yang betul ialah ${correctAnswer}.`;
 
         $("answerFeedback").className =
             `feedback ${result.correct ? "correct" : "wrong"}`;
 
         $("answerFeedback").classList.remove("hidden");
+
+        // Beri masa untuk pemain melihat warna jawapan.
+        await new Promise(resolve => setTimeout(resolve, 1800));
 
         await poll();
 
