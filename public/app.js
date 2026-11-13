@@ -5,6 +5,7 @@ let lobbyId=localStorage.getItem('aq_lobby_id')||'';
 const forceHome=new URLSearchParams(location.search).get('home')==='1';
 if(forceHome){localStorage.removeItem('aq_lobby_id');lobbyId='';history.replaceState(null,'','/');}
 let state=null,activeQuestion=null,selectedAnswer=null,pollTimer=null,countdown=null,seconds=30,spinBusy=false;
+let questionLoading=false;
 let urlQuestionId=new URLSearchParams(location.search).get('qid');
 let urlQuestionLoaded=false;
 localStorage.setItem('aq_player_id',playerId);
