@@ -36,6 +36,8 @@ let pollTimer = null;
 let countdown = null;
 let seconds = 30;
 let spinBusy = false;
+let wheelRotation = 0;
+const WHEEL_POINTS = [5, 10, 15, 20, 25, 30, 50, 0, -5, -10];
 let questionLoading = false;
 let urlQuestionId = params.get("qid");
 let urlQuestionLoaded = false;
@@ -929,6 +931,60 @@ $("startBtn").addEventListener("click", async () => {
    17. SPIN FOR POINTS
 ----------------------------- */
 
+// Paparkan nilai mata pada 10 segmen roda.
+function setupWheelLabels() {
+    const wheel = $("wheel");
+
+    if (!wheel) {
+        return;
+    }
+
+    let labels = wheel.querySelector(".wheel-labels");
+
+    if (!labels) {
+        labels = document.createElement("div");
+        labels.className = "wheel-labels";
+        wheel.insertBefore(labels, wheel.querySelector(".wheel-center"));
+    }
+
+    labels.innerHTML = WHEEL_POINTS.map((points, index) => {
+        const angle = index * 36 + 18;
+        const value = points > 0 ? `+${points}` : String(points);
+
+        return `
+            <span
+                class="wheel-label"
+                style="--label-angle:${angle}deg;--label-counter-angle:${-angle}deg"
+            >${value}</span>
+        `;
+    }).join("");
+}
+
+// Putarkan roda supaya segmen dengan mata daripada server
+// berhenti tepat di bawah penunjuk putih di bahagian atas.
+function spinWheelToPoints(points) {
+    const wheel = $("wheel");
+    const targetIndex = WHEEL_POINTS.indexOf(Number(points));
+
+    if (!wheel) {
+        throw new Error("Elemen Wheel tidak dijumpai.");
+    }
+
+    if (targetIndex === -1) {
+        throw new Error(`Nilai mata ${points} tiada pada Wheel.`);
+    }
+
+    const segmentCenter = targetIndex * 36 + 18;
+    const currentAngle = ((wheelRotation % 360) + 360) % 360;
+    const alignment = (360 - ((segmentCenter + currentAngle) % 360)) % 360;
+
+    // Enam pusingan penuh, kemudian sejajarkan segmen yang menang.
+    wheelRotation += (360 * 6) + alignment;
+    wheel.style.transform = `rotate(${wheelRotation}deg)`;
+}
+
+setupWheelLabels();
+
 $("spinBtn").addEventListener("click", async () => {
     if (spinBusy) {
         return;
@@ -939,14 +995,14 @@ $("spinBtn").addEventListener("click", async () => {
     $("spinResult").classList.add("hidden");
 
     try {
+        // Backend menentukan mata sebenar dan mengemas kini skor.
         const result = await act("spinPoints", {
             lobbyId,
             playerId
         });
 
-        const degrees = 1440 + Math.floor(Math.random() * 720);
-
-        $("wheel").style.transform = `rotate(${degrees}deg)`;
+        // Animasi menggunakan nilai mata yang sama daripada backend.
+        spinWheelToPoints(result.points);
 
         setTimeout(async () => {
             $("spinResult").textContent =
@@ -958,7 +1014,7 @@ $("spinBtn").addEventListener("click", async () => {
             $("spinBtn").disabled = false;
 
             await poll();
-        }, 4100);
+        }, 4300);
 
     } catch (error) {
         spinBusy = false;
