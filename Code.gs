@@ -232,7 +232,11 @@ function submitAnswer(payload) {
     lobby.game.activeQuestionId=null;
     writeHistory_(lobby,qid,correct,'',0);
     writeLobby_(lobby);
-    return {correct:correct,nextPhase:'block'};
+    return {
+    correct: correct,
+    correctAnswer: correctAnswer,
+    nextPhase: 'block'
+};
   });
 }
 function chooseBlock(payload) {
