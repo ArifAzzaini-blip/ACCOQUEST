@@ -155,8 +155,9 @@ async function scanNfc(){
 }
 
 async function loadQuestion(id){
- if(!id)return toast('Masukkan Question ID.');renderQuestionSkeleton();let q;try{q=await act('getQuestion',{lobbyId,playerId,questionId:id});}catch(e){$('questionBox').classList.add('hidden');$('scanArea').classList.remove('hidden');return;}activeQuestion=q;selectedAnswer=null;
- $('qText').classList.remove('skeleton-question');$('qId').textContent=q.id;$('qCategory').textContent=q.category;$('qText').textContent=q.text;
+ if(!id)return toast('Masukkan Question ID.');renderQuestionSkeleton();let q;try{q=await act('getQuestion',{lobbyId,playerId,questionId:id});}catch(e){$('questionBox').classList.add('hidden');$('scanArea').classList.remove('hidden');return;}activeQuestion=q;
+selectedAnswer=null;
+questionLoading=false;
  $('answers').innerHTML=q.options.map((v,i)=>`<button class="answer-option" data-answer="${'ABCD'[i]}"><b>${'ABCD'[i]}.</b> ${esc(v)}</button>`).join('');
  document.querySelectorAll('.answer-option').forEach(b=>b.onclick=()=>{selectedAnswer=b.dataset.answer;document.querySelectorAll('.answer-option').forEach(x=>x.classList.toggle('selected',x===b));$('submitAnswer').disabled=false;});
  $('answerFeedback').classList.add('hidden');$('submitAnswer').disabled=true;$('scanArea').classList.add('hidden');$('questionBox').classList.remove('hidden');
