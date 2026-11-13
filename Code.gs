@@ -296,14 +296,13 @@ function submitAnswer(payload) {
     writeLobby_(lobby);
 
     return {
-      correct: correct,
-      correctAnswer: correctAnswer,
-      nextPhase: "block"
-    };
-  });
+    correct: correct,
+    correctAnswer: correctAnswer,
+    nextPhase: "block"
+};
+});
 }
-  });
-}
+
 function chooseBlock(payload) {
   return withLock_(function(){
     const lobby=readLobby_(String(payload.lobbyId)),playerId=String(payload.playerId),block=String(payload.block||'').toUpperCase();
