@@ -56,10 +56,22 @@
             <p id="nfcHelp" class="muted tiny">NFC scanner berjalan pada halaman HTTPS penuh. Jika NFC tidak tersedia, masukkan Question ID secara manual.</p>
           </div>
           <div id="questionBox" class="question-box hidden">
-            <div class="question-meta"><span id="qId"></span><span id="qCategory"></span><span id="timer" class="timer">30s</span></div>
-            <h3 id="qText"></h3><div id="answers" class="answers"></div>
-            <button id="submitAnswer" class="btn primary full" disabled>SUBMIT ANSWER</button><div id="answerFeedback" class="feedback hidden"></div><div id="answerFeedback" class="feedback hidden"></div>
+              <div class="question-meta">
+                  <span id="qId"></span>
+                  <span id="qCategory"></span>
+                  <span id="timer" class="timer">30s</span>
+              </div>
+          
+              <h3 id="qText"></h3>
+              <div id="answers" class="answers"></div>
+          
+              <button id="submitAnswer" class="btn primary full" disabled>
+                  SUBMIT ANSWER
+              </button>
           </div>
+          
+          <!-- Feedback diletakkan di luar questionBox -->
+          <div id="answerFeedback" class="feedback hidden"></div>
         </section>
         <section id="blockPanel" class="panel game-panel hidden"><div class="eyebrow">02 / STRATEGY</div><h3>Choose your block</h3><p class="muted tiny">Pilih satu block. Block yang telah dipilih tidak boleh digunakan semula dalam match.</p><div id="blocks" class="blocks"></div></section>
         <section id="spinPanel" class="panel game-panel hidden"><div class="eyebrow">03 / REWARD</div><h3>Spin for points</h3><div class="wheel-wrap"><div id="wheel" class="wheel"><div class="wheel-center">SPIN</div></div><div class="wheel-pointer"></div></div><button id="spinBtn" class="btn primary full">SPIN THE WHEEL</button><div id="spinResult" class="spin-result hidden"></div></section>
