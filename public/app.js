@@ -965,7 +965,42 @@ function setupWheelLabels() {
 }
 
 
-function spinWheelToPoints(points) {
+function setupWheelLabels() {
+    const wheel = $("wheel");
+
+    if (!wheel) return;
+
+    let labels = wheel.querySelector(".wheel-labels");
+
+    if (!labels) {
+        labels = document.createElement("div");
+        labels.className = "wheel-labels";
+
+        wheel.insertBefore(
+            labels,
+            wheel.querySelector(".wheel-center")
+        );
+    }
+
+    labels.innerHTML = WHEEL_POINTS.map((points, index) => {
+        const angle = index * 36 + 18;
+        const value = points > 0 ? `+${points}` : String(points);
+
+        return `
+            <span
+                class="wheel-label"
+                style="
+                    --label-angle: ${angle}deg;
+                    --label-counter-angle: ${-angle}deg;
+                "
+            >${value}</span>
+        `;
+    }).join("");
+}
+
+
+// ANIMASI WHEEL
+async function spinWheelToPoints(points) {
     const wheel = $("wheel");
 
     const targetIndex = WHEEL_POINTS.indexOf(Number(points));
@@ -975,9 +1010,7 @@ function spinWheelToPoints(points) {
     }
 
     if (targetIndex === -1) {
-        throw new Error(
-            `Nilai mata ${points} tiada dalam senarai Wheel.`
-        );
+        throw new Error(`Nilai mata ${points} tidak sah.`);
     }
 
     const segmentCenter = targetIndex * 36 + 18;
@@ -988,17 +1021,54 @@ function spinWheelToPoints(points) {
     const alignment =
         (360 - ((segmentCenter + currentAngle) % 360)) % 360;
 
-    // Enam pusingan penuh sebelum berhenti.
-    wheelRotation += (360 * 6) + alignment;
+    const startRotation = wheelRotation;
 
-    wheel.style.transform = `rotate(${wheelRotation}deg)`;
+    const endRotation =
+        startRotation + (360 * 6) + alignment;
+
+    // Hentikan animasi terdahulu.
+    wheel.getAnimations().forEach(animation => {
+        animation.cancel();
+    });
+
+    wheel.style.transform = `rotate(${startRotation}deg)`;
+
+    // Paksa browser membaca kedudukan awal.
+    void wheel.offsetWidth;
+
+    // Jalankan animasi.
+    const animation = wheel.animate(
+        [
+            {
+                transform: `rotate(${startRotation}deg)`
+            },
+            {
+                transform: `rotate(${endRotation}deg)`
+            }
+        ],
+        {
+            duration: 4500,
+            easing: "cubic-bezier(0.12, 0.75, 0.12, 1)",
+            fill: "forwards"
+        }
+    );
+
+    await animation.finished;
+
+    // Simpan kedudukan akhir.
+    wheelRotation = endRotation;
+
+    wheel.style.transform = `rotate(${endRotation}deg)`;
+
+    animation.cancel();
 }
 
 
-// Paparkan nombor pada roda apabila halaman dimuatkan.
+// Paparkan nombor mata.
 setupWheelLabels();
 
 
+// BUTANG SPIN
 $("spinBtn").addEventListener("click", async () => {
 
     if (spinBusy) return;
@@ -1010,7 +1080,7 @@ $("spinBtn").addEventListener("click", async () => {
 
     try {
 
-        // Dapatkan keputusan sebenar daripada backend.
+        // Dapatkan mata daripada Google Apps Script.
         const result = await act("spinPoints", {
             lobbyId,
             playerId
@@ -1022,13 +1092,8 @@ $("spinBtn").addEventListener("click", async () => {
             throw new Error("Nilai mata tidak sah daripada server.");
         }
 
-        // Mulakan animasi berdasarkan mata sebenar.
-        spinWheelToPoints(points);
-
-        // Tunggu sehingga animasi selesai.
-        await new Promise(resolve => {
-            setTimeout(resolve, 4400);
-        });
+        // Tunggu animasi roda selesai.
+        await spinWheelToPoints(points);
 
         // Paparkan keputusan.
         $("spinResult").textContent =
@@ -1036,16 +1101,15 @@ $("spinBtn").addEventListener("click", async () => {
 
         $("spinResult").classList.remove("hidden");
 
-        // Beri masa untuk pemain melihat keputusan.
+        // Beri masa untuk melihat keputusan.
         await new Promise(resolve => {
             setTimeout(resolve, 1800);
         });
 
         spinBusy = false;
-
         $("spinBtn").disabled = false;
 
-        // Kemaskini giliran dan leaderboard.
+        // Kemas kini leaderboard dan giliran.
         await poll();
 
     } catch (error) {
@@ -1054,34 +1118,8 @@ $("spinBtn").addEventListener("click", async () => {
 
         $("spinBtn").disabled = false;
 
-        toast(error.message || "Spin gagal. Sila cuba lagi.");
+        toast(error.message || "Spin gagal.");
     }
-});
-
-/* -----------------------------
-   18. RESULTS & REPLAY
------------------------------ */
-
-$("playAgain").addEventListener("click", async () => {
-    try {
-        state = await act("resetGame", {
-            lobbyId,
-            playerId
-        });
-
-        activeQuestion = null;
-        selectedAnswer = null;
-
-        renderState();
-        startPolling();
-    } catch (error) {
-        // Error is displayed by act().
-    }
-});
-
-$("backLobby").addEventListener("click", () => {
-    renderState();
-    startPolling();
 });
 
 
