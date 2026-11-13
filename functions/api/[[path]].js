@@ -23,11 +23,18 @@ export async function onRequest(context) {
       redirect: "follow"
     });
     const raw = await upstream.text();
+
     let parsed;
-    try { parsed = JSON.parse(raw); }
-    catch { parsed = { ok: false, error: "Backend Apps Script tidak memulangkan JSON yang sah.", detail: raw.slice(0, 300) }; }
-    return Response.json(parsed, { status: upstream.ok ? 200 : upstream.status, headers: cors });
-  } catch (error) {
-    return Response.json({ ok: false, error: error.message || "Proxy request failed." }, { status: 502, headers: cors });
-  }
-}
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        parsed = {
+            ok: false,
+            error: "Backend Apps Script tidak memulangkan JSON yang sah."
+        };
+    }
+    
+    return Response.json(parsed, {
+        status: upstream.ok ? 200 : upstream.status,
+        headers: cors
+    });
