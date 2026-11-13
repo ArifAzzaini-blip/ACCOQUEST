@@ -268,3 +268,20 @@
         transition-duration: .01ms;
     }
 }
+
+/* ACCOQUEST WHEEL ANIMATION FIX */
+
+#wheel {
+    transform-origin: 50% 50%;
+    transition: none !important;
+    will-change: transform;
+    backface-visibility: hidden;
+}
+
+.wheel-labels {
+    pointer-events: none;
+}
+
+.wheel-center {
+    pointer-events: none;
+}
