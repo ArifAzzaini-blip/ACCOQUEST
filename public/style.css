@@ -272,8 +272,7 @@
 /* ACCOQUEST WHEEL ANIMATION FIX */
 
 #wheel {
-    transform-origin: 50% 50%;
-    transition: none !important;
+    transform-origin: center center;
     will-change: transform;
     backface-visibility: hidden;
 }
