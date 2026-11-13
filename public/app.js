@@ -418,16 +418,20 @@ function renderGame() {
         game.lastResult.playerId === playerId &&
         game.phase !== "question"
     ) {
-        $("answerFeedback").textContent = game.lastResult.correct
-            ? "BETUL! Jawapan tepat."
-            : "SALAH. Jawapan tidak tepat.";
-
-        $("answerFeedback").className =
-            `feedback ${game.lastResult.correct ? "correct" : "wrong"}`;
-
-        $("answerFeedback").classList.remove("hidden");
-    }
-}
+        if (game.lastResult.correct) {
+    $("answerFeedback").textContent =
+        "✓ JAWAPAN BETUL!\nTahniah! Jawapan anda tepat.";
+      } else {
+          $("answerFeedback").textContent =
+              `✗ JAWAPAN SALAH!\n\n` +
+              `PEMBETULAN JAWAPAN:\n` +
+              `Jawapan yang betul ialah ${game.lastResult.correctAnswer || "Tidak diketahui"}.`;
+      }
+      
+      $("answerFeedback").className =
+          `feedback ${game.lastResult.correct ? "correct" : "wrong"}`;
+      
+      $("answerFeedback").classList.remove("hidden");
 
 
 /* -----------------------------
