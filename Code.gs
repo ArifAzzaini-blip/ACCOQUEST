@@ -234,10 +234,12 @@ function submitAnswer(payload) {
     const data = sh.getDataRange().getValues();
 
     let correctAnswer = '';
+    let explanation = '';
 
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]).trim().toUpperCase() === qid) {
         correctAnswer = String(data[i][7]).trim().toUpperCase();
+        explanation = String(data[i][10] || '').trim();
         break;
       }
     }
@@ -260,7 +262,8 @@ function submitAnswer(payload) {
       playerId: playerId,
       correct: correct,
       questionId: qid,
-      correctAnswer: correctAnswer
+      correctAnswer: correctAnswer,
+      explanation: explanation
     };
 
     lobby.game.phase = 'block';
@@ -272,6 +275,7 @@ function submitAnswer(payload) {
     return {
       correct: correct,
       correctAnswer: correctAnswer,
+      explanation: explanation,
       nextPhase: 'block'
     };
   });
