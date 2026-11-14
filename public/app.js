@@ -446,7 +446,7 @@ function renderGame() {
               }, 3000);
           }
       }
-
+}
 
 /* -----------------------------
    9. LEADERBOARD
