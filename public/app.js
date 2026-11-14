@@ -432,6 +432,8 @@ function renderGame() {
           `feedback ${game.lastResult.correct ? "correct" : "wrong"}`;
       
       $("answerFeedback").classList.remove("hidden");
+      }
+}
 
 
 /* -----------------------------
