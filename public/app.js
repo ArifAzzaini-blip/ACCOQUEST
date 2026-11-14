@@ -418,22 +418,34 @@ function renderGame() {
         game.lastResult.playerId === playerId &&
         game.phase !== "question"
     ) {
-        if (game.lastResult.correct) {
-    $("answerFeedback").textContent =
-        "✓ JAWAPAN BETUL!\nTahniah! Jawapan anda tepat.";
-      } else {
-          $("answerFeedback").textContent =
-              `✗ JAWAPAN SALAH!\n\n` +
-              `PEMBETULAN JAWAPAN:\n` +
-              `Jawapan yang betul ialah ${game.lastResult.correctAnswer || "Tidak diketahui"}.`;
-      }
+        const feedback = $("answerFeedback");
+        const feedbackKey = JSON.stringify(game.lastResult);
       
-      $("answerFeedback").className =
-          `feedback ${game.lastResult.correct ? "correct" : "wrong"}`;
+          if (feedback.dataset.feedbackKey !== feedbackKey) {
+              feedback.dataset.feedbackKey = feedbackKey;
       
-      $("answerFeedback").classList.remove("hidden");
+              if (game.lastResult.correct) {
+                  feedback.textContent =
+                      "✓ JAWAPAN BETUL!\nTahniah! Jawapan anda tepat.";
+              } else {
+                  feedback.textContent =
+                      `✗ JAWAPAN SALAH!\n\n` +
+                      `PEMBETULAN JAWAPAN:\n` +
+                      `Jawapan yang betul ialah ${game.lastResult.correctAnswer || "Tidak diketahui"}.`;
+              }
+      
+              feedback.className =
+                  `feedback ${game.lastResult.correct ? "correct" : "wrong"}`;
+      
+              feedback.classList.remove("hidden");
+      
+              clearTimeout(window.feedbackTimeout);
+      
+              window.feedbackTimeout = setTimeout(() => {
+                  feedback.classList.add("hidden");
+              }, 3000);
+          }
       }
-}
 
 
 /* -----------------------------
