@@ -329,3 +329,23 @@
 .hidden {
     display: none !important;
 }
+
+/* Three strategic blocks */
+.blocks { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.block { min-height:112px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; }
+.block small { font:700 9px 'DM Sans'; letter-spacing:1px; }
+.block-green { background:linear-gradient(145deg,#087b4b,#064e3b); border-color:#22c55e; }
+.block-blue { background:linear-gradient(145deg,#1d64c8,#153b82); border-color:#60a5fa; }
+.block-red { background:linear-gradient(145deg,#b4233e,#70172c); border-color:#fb7185; }
+.block:disabled { opacity:.3; filter:grayscale(.8); }
+.block-cooldown { font-size:10px; color:#9fb0d0; text-align:center; }
+.wheel-wrap { width:260px; height:260px; }
+.wheel { background:conic-gradient(#1d9b62 0 36deg,#22c55e 36deg 72deg,#15803d 72deg 108deg,#34d399 108deg 144deg,#166534 144deg 180deg,#4ade80 180deg 216deg,#047857 216deg 252deg,#86efac 252deg 288deg,#15803d 288deg 324deg,#22c55e 324deg); }
+.wheel.mode-green { background:conic-gradient(#15803d 0 51.4deg,#22c55e 51.4deg 102.8deg,#16a34a 102.8deg 154.2deg,#4ade80 154.2deg 205.6deg,#166534 205.6deg 257deg,#34d399 257deg 308.4deg,#15803d 308.4deg 360deg); }
+.wheel.mode-blue { background:conic-gradient(#2563eb 0 36deg,#60a5fa 36deg 72deg,#1d4ed8 72deg 108deg,#93c5fd 108deg 144deg,#1e40af 144deg 180deg,#b91c1c 180deg 216deg,#ef4444 216deg 252deg,#991b1b 252deg 288deg,#f87171 288deg 324deg,#7f1d1d 324deg); }
+.wheel.mode-red { background:conic-gradient(#991b1b 0 60deg,#ef4444 60deg 120deg,#7f1d1d 120deg 180deg,#dc2626 180deg 240deg,#b91c1c 240deg 300deg,#475569 300deg 360deg); }
+.answer-review { margin:24px 0; padding:18px; border:1px solid var(--line); border-radius:14px; background:#0a142b; }
+.review-item { padding:13px 0; border-bottom:1px solid #263657; font-size:12px; line-height:1.6; }
+.review-item:last-child { border-bottom:0; }
+.review-correct { color:#6ff0c2; } .review-wrong { color:#ff9ab0; }
+@media(max-width:600px){.wheel-wrap{width:220px;height:220px}.block{min-height:92px;padding:14px 6px}}
