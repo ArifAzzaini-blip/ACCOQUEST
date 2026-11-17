@@ -1,81 +1,35 @@
-export async function onRequestPost({ request, env }) {
-    try {
-        if (!env.GAS_WEBAPP_URL) {
-            throw new Error("GAS_WEBAPP_URL belum ditetapkan.");
-        }
-
-        if (!env.ACCOQUEST_API_KEY) {
-            throw new Error("ACCOQUEST_API_KEY belum ditetapkan.");
-        }
-
-        const incoming = await request.json();
-
-        if (!incoming.action) {
-            throw new Error("API action tidak dinyatakan.");
-        }
-
-        const allowedActions = [
-            "createLobby",
-            "joinLobby",
-            "getGameState",
-            "setReady",
-            "startGame",
-            "getQuestion",
-            "submitAnswer",
-            "chooseBlock",
-            "spinPoints",
-            "resetGame"
-        ];
-
-        if (!allowedActions.includes(incoming.action)) {
-            throw new Error("API action tidak dibenarkan.");
-        }
-
-        const response = await fetch(env.GAS_WEBAPP_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                apiKey: env.ACCOQUEST_API_KEY,
-                action: incoming.action,
-                data: incoming.data || {}
-            }),
-            redirect: "follow"
-        });
-
-        const resultText = await response.text();
-
-        let result;
-
-        try {
-            result = JSON.parse(resultText);
-        } catch {
-            throw new Error(
-                "Google Apps Script memberikan respons bukan JSON."
-            );
-        }
-
-        return new Response(JSON.stringify(result), {
-            status: response.ok ? 200 : response.status,
-            headers: {
-                "Content-Type": "application/json",
-                "Cache-Control": "no-store"
-            }
-        });
-
-    } catch (error) {
-        return new Response(
-            JSON.stringify({
-                ok: false,
-                error: error.message || "Server error."
-            }),
-            {
-                status: 500,
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            }
-        );
+export async function onRequest(context) {
+  const { request, env } = context;
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Cache-Control": "no-store"
+  };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  if (request.method !== "POST") return Response.json({ ok:false, error:"Method not allowed" }, { status:405, headers });
+  if (!env.GAS_WEBAPP_URL || !env.ACCOQUEST_API_KEY) {
+    return Response.json({ ok:false, error:"GAS_WEBAPP_URL atau ACCOQUEST_API_KEY belum ditetapkan." }, { status:500, headers });
+  }
+  try {
+    const body = await request.json();
+    if (!body || typeof body.action !== "string" || !body.data || typeof body.data !== "object" || Array.isArray(body.data)) {
+      return Response.json({ ok:false, error:"Invalid request payload." }, { status:400, headers });
     }
+    const allowed = ["createLobby","joinLobby","getGameState","setReady","startGame","getQuestion","submitAnswer","chooseBlock","spinPoints","resetGame","replayGame"];
+    if (!allowed.includes(body.action)) return Response.json({ ok:false, error:"API action tidak dibenarkan." }, { status:400, headers });
+    const upstream = await fetch(env.GAS_WEBAPP_URL, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ action:body.action, data:body.data, apiKey:env.ACCOQUEST_API_KEY }),
+      redirect:"follow"
+    });
+    const raw = await upstream.text();
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch { parsed = { ok:false, error:"Backend Apps Script tidak memulangkan JSON yang sah." }; }
+    return Response.json(parsed, { status:upstream.ok ? 200 : upstream.status, headers });
+  } catch (error) {
+    return Response.json({ ok:false, error:error.message || "Internal server error." }, { status:500, headers });
+  }
 }
