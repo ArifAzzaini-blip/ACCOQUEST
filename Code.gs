@@ -122,23 +122,36 @@ function publicState_(lobby, playerId) {
     correct:game.scores[id].correct,wrong:game.scores[id].wrong
   })).sort((a,b)=>b.points-a.points);
 
+  // Compatibility fallback: recover the last submitted result from answerReview
+  // if an older game record does not yet contain game.lastResult.
+  const reviews=game&&Array.isArray(game.answerReview)?game.answerReview:[];
+  const latestReview=reviews.length?reviews[reviews.length-1]:null;
+  const result=game&&game.lastResult ? game.lastResult :
+    (latestReview && latestReview.playerId===playerId ? {
+      playerId:latestReview.playerId,
+      correct:!!latestReview.correct,
+      questionId:latestReview.questionId
+    } : null);
+
   let availableBlocks=[];
   let blueCooldownRounds=0;
-  if(game && game.phase==='block' && game.currentPlayerId===playerId && game.lastResult) {
-    if(game.lastResult.correct) availableBlocks=['GREEN'];
-    else {
+  if(game && game.phase==='block' && game.currentPlayerId===playerId && result && result.playerId===playerId) {
+    if(result.correct) {
+      availableBlocks=['GREEN'];
+    } else {
       availableBlocks=['RED'];
-      const lastBlue=Number(game.blueLastUsedRound[playerId]||0);
-      const roundsSince=lastBlue ? game.round-lastBlue : 999;
+      const blueUsedMap=game.blueLastUsedRound||{};
+      const lastBlue=Number(blueUsedMap[playerId]||0);
+      const roundsSince=lastBlue ? Number(game.round||0)-lastBlue : 999;
       if(roundsSince>=2) availableBlocks.push('BLUE');
       else blueCooldownRounds=2-roundsSince;
     }
   }
 
-  const safeLastResult=game&&game.lastResult ? {
-    playerId:game.lastResult.playerId,
-    correct:!!game.lastResult.correct,
-    questionId:game.lastResult.questionId
+  const safeLastResult=result ? {
+    playerId:result.playerId,
+    correct:!!result.correct,
+    questionId:result.questionId||''
   } : null;
 
   return {
