@@ -115,27 +115,49 @@ function validateTurn_(lobby, playerId) {
   if(!lobby.game || lobby.game.currentPlayerId!==playerId)throw new Error('Bukan giliran anda.');
 }
 function publicState_(lobby, playerId) {
-  const game=lobby.game || null;
+  const game=lobby.game||null;
   let scores=[];
-  if(game && game.scores) {
-    scores=Object.keys(game.scores).map(id=>({playerId:id,name:game.scores[id].name,points:game.scores[id].points,correct:game.scores[id].correct,wrong:game.scores[id].wrong}))
-      .sort((a,b)=>b.points-a.points);
+  if(game&&game.scores) scores=Object.keys(game.scores).map(id=>({
+    playerId:id,name:game.scores[id].name,points:game.scores[id].points,
+    correct:game.scores[id].correct,wrong:game.scores[id].wrong
+  })).sort((a,b)=>b.points-a.points);
+
+  let availableBlocks=[];
+  let blueCooldownRounds=0;
+  if(game && game.phase==='block' && game.currentPlayerId===playerId && game.lastResult) {
+    if(game.lastResult.correct) availableBlocks=['GREEN'];
+    else {
+      availableBlocks=['RED'];
+      const lastBlue=Number(game.blueLastUsedRound[playerId]||0);
+      const roundsSince=lastBlue ? game.round-lastBlue : 999;
+      if(roundsSince>=2) availableBlocks.push('BLUE');
+      else blueCooldownRounds=2-roundsSince;
+    }
   }
+
+  const safeLastResult=game&&game.lastResult ? {
+    playerId:game.lastResult.playerId,
+    correct:!!game.lastResult.correct,
+    questionId:game.lastResult.questionId
+  } : null;
+
   return {
     lobbyId:lobby.lobbyId,hostId:lobby.hostId,status:lobby.status,
-    players:Object.keys(lobby.players||{}).map(id=>({playerId:id,name:lobby.players[id].name,ready:lobby.players[id].ready,host:id===lobby.hostId})),
-    me: lobby.players[playerId] ? {name:lobby.players[playerId].name,ready:lobby.players[playerId].ready} : null,
-    game: game ? {
+    players:Object.keys(lobby.players||{}).map(id=>({
+      playerId:id,name:lobby.players[id].name,ready:lobby.players[id].ready,host:id===lobby.hostId
+    })),
+    me:lobby.players[playerId]?{name:lobby.players[playerId].name,ready:lobby.players[playerId].ready}:null,
+    game:game?{
       round:game.round,totalRounds:game.totalRounds,phase:game.phase,
-      currentPlayerId:game.currentPlayerId,currentPlayerName:game.scores[game.currentPlayerId] ? game.scores[game.currentPlayerId].name : '',
+      currentPlayerId:game.currentPlayerId,
+      currentPlayerName:game.scores[game.currentPlayerId]?game.scores[game.currentPlayerId].name:'',
       isMyTurn:game.currentPlayerId===playerId,
-      usedBlocks:game.usedBlocks||[],scores:scores,
-      lastResult:game.lastResult||null,
-      selectedBlock:game.selectedBlock||null
-    } : null
+      scores:scores,lastResult:safeLastResult,selectedBlock:game.selectedBlock||null,
+      availableBlocks:availableBlocks,blueCooldownRounds:blueCooldownRounds,
+      answerReview:lobby.status==='finished'?(game.answerReview||[]):[]
+    }:null
   };
 }
-
 function createLobby(payload) {
   return withLock_(function(){
     const playerId=String(payload.playerId||'');
@@ -187,7 +209,7 @@ function startGame(payload) {
     const rounds=Math.max(1,Math.min(20,Number(payload.totalRounds)||CONFIG.DEFAULT_ROUNDS));
     lobby.status='playing';
     lobby.game={round:1,totalRounds:rounds,order:order,turnIndex:0,currentPlayerId:order[0],phase:'question',
-      usedBlocks:[],usedQuestions:[],scores:scores,lastResult:null,selectedBlock:null,answeredQuestionId:null};
+      usedBlocks:[],usedQuestions:[],scores:scores,lastResult:null,selectedBlock:null,answeredQuestionId:null,blueLastUsedRound:{},answerReview:[]};
     writeLobby_(lobby);
     return publicState_(lobby,payload.playerId);
   });
@@ -216,103 +238,109 @@ function getQuestion(payload) {
 }
 function submitAnswer(payload) {
   return withLock_(function() {
-    const lobby = readLobby_(String(payload.lobbyId));
-    const playerId = String(payload.playerId);
-    const qid = String(payload.questionId).trim().toUpperCase();
-    const answer = String(payload.answer || '').trim().toUpperCase();
-
-    validateTurn_(lobby, playerId);
-
-    if (
-      lobby.game.phase !== 'question' ||
-      String(lobby.game.activeQuestionId).trim().toUpperCase() !== qid
-    ) {
+    const lobby=readLobby_(String(payload.lobbyId));
+    const playerId=String(payload.playerId);
+    const qid=String(payload.questionId||'').trim().toUpperCase();
+    const answer=String(payload.answer||'').trim().toUpperCase();
+    validateTurn_(lobby,playerId);
+    if(lobby.game.phase!=='question'||String(lobby.game.activeQuestionId||'').toUpperCase()!==qid)
       throw new Error('Soalan tidak sepadan atau giliran telah berubah.');
+
+    const sh=getDb_().getSheetByName(CONFIG.QUESTION_SHEET);
+    const data=sh.getDataRange().getValues();
+    let correctAnswer='',explanation='',questionText='';
+    for(let i=1;i<data.length;i++) if(String(data[i][0]).trim().toUpperCase()===qid) {
+      correctAnswer=String(data[i][7]||'').trim().toUpperCase();
+      explanation=String(data[i][10]||'').trim();
+      questionText=String(data[i][2]||'');
+      break;
     }
+    if(!correctAnswer) throw new Error('Skema jawapan tidak dijumpai dalam Google Sheets.');
+    const correct=answer===correctAnswer;
+    if(correct) lobby.game.scores[playerId].correct++;
+    else lobby.game.scores[playerId].wrong++;
 
-    const sh = getDb_().getSheetByName(CONFIG.QUESTION_SHEET);
-    const data = sh.getDataRange().getValues();
-
-    let correctAnswer = '';
-    let explanation = '';
-
-    for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]).trim().toUpperCase() === qid) {
-        correctAnswer = String(data[i][7]).trim().toUpperCase();
-        explanation = String(data[i][10] || '').trim();
-        break;
-      }
-    }
-
-    if (!correctAnswer) {
-      throw new Error('Skema jawapan tidak dijumpai dalam Google Sheets.');
-    }
-
-    const correct = answer === correctAnswer;
-
-    if (correct) {
-      lobby.game.scores[playerId].correct++;
-    } else {
-      lobby.game.scores[playerId].wrong++;
-    }
-
+    const reviewItem={
+      playerId:playerId,playerName:lobby.game.scores[playerId].name,
+      questionId:qid,question:questionText,answer:answer==='TIMEOUT'?'Tiada jawapan':answer,
+      correct:correct,correctAnswer:correctAnswer,explanation:explanation
+    };
+    lobby.game.answerReview=lobby.game.answerReview||[];
+    lobby.game.answerReview.push(reviewItem);
     lobby.game.usedQuestions.push(qid);
-
-    lobby.game.lastResult = {
-      playerId: playerId,
-      correct: correct,
-      questionId: qid,
-      correctAnswer: correctAnswer,
-      explanation: explanation
-    };
-
-    lobby.game.phase = 'block';
-    lobby.game.activeQuestionId = null;
-
-    writeHistory_(lobby, qid, correct, '', 0);
+    lobby.game.lastResult={playerId:playerId,correct:correct,questionId:qid};
+    lobby.game.phase='block';
+    lobby.game.activeQuestionId=null;
+    writeHistory_(lobby,qid,correct,'',0);
     writeLobby_(lobby);
-
-    return {
-      correct: correct,
-      correctAnswer: correctAnswer,
-      explanation: explanation,
-      nextPhase: 'block'
-    };
+    // Deliberately do not return the correct answer to the live client.
+    return {correct:correct,nextPhase:'block'};
   });
 }
-
 function chooseBlock(payload) {
   return withLock_(function(){
-    const lobby=readLobby_(String(payload.lobbyId)),playerId=String(payload.playerId),block=String(payload.block||'').toUpperCase();
+    const lobby=readLobby_(String(payload.lobbyId));
+    const playerId=String(payload.playerId);
+    const block=String(payload.block||'').toUpperCase();
     validateTurn_(lobby,playerId);
-    if(lobby.game.phase!=='block')throw new Error('Bukan fasa pemilihan block.');
-    if(!/^[A-F]$/.test(block)||lobby.game.usedBlocks.indexOf(block)>=0)throw new Error('Block tidak sah atau sudah dipilih.');
-    lobby.game.usedBlocks.push(block);lobby.game.selectedBlock=block;lobby.game.phase='spin';
+    if(lobby.game.phase!=='block') throw new Error('Bukan fasa pemilihan block.');
+    const correct=!!(lobby.game.lastResult&&lobby.game.lastResult.correct);
+    let allowed=[];
+    if(correct) allowed=['GREEN'];
+    else {
+      allowed=['RED'];
+      const lastBlue=Number((lobby.game.blueLastUsedRound||{})[playerId]||0);
+      if(!lastBlue || lobby.game.round-lastBlue>=2) allowed.push('BLUE');
+    }
+    if(!allowed.includes(block)) throw new Error('Block tidak tersedia untuk keputusan atau cooldown semasa.');
+    if(block==='BLUE') {
+      lobby.game.blueLastUsedRound=lobby.game.blueLastUsedRound||{};
+      lobby.game.blueLastUsedRound[playerId]=lobby.game.round;
+    }
+    lobby.game.selectedBlock=block;
+    lobby.game.phase='spin';
     writeLobby_(lobby);
-    return {ok:true};
+    return {ok:true,block:block};
   });
 }
 function spinPoints(payload) {
   return withLock_(function(){
-    const lobby=readLobby_(String(payload.lobbyId)),playerId=String(payload.playerId);
+    const lobby=readLobby_(String(payload.lobbyId));
+    const playerId=String(payload.playerId);
     validateTurn_(lobby,playerId);
-    if(lobby.game.phase!=='spin')throw new Error('Bukan fasa spin.');
-    const pointValues=[5,10,15,20,25,30,50,0,-5,-10];
-    const points=pointValues[Math.floor(Math.random()*pointValues.length)];
+    if(lobby.game.phase!=='spin') throw new Error('Bukan fasa spin.');
+    const block=String(lobby.game.selectedBlock||'');
+    const pools={
+      GREEN:[5,10,15,20,25,30,50],
+      BLUE:[5,10,15,20,25,-5,-10,-15,-20,-25],
+      RED:[-5,-10,-15,-20,-25,0]
+    };
+    const pool=pools[block];
+    if(!pool) throw new Error('Warna block tidak sah.');
+    const points=pool[Math.floor(Math.random()*pool.length)];
     lobby.game.scores[playerId].points+=points;
-    writeHistory_(lobby,lobby.game.lastResult?lobby.game.lastResult.questionId:'',lobby.game.lastResult?lobby.game.lastResult.correct:false,lobby.game.selectedBlock,points);
+    writeHistory_(lobby,lobby.game.lastResult?lobby.game.lastResult.questionId:'',lobby.game.lastResult?lobby.game.lastResult.correct:false,block,points);
     const next=lobby.game.turnIndex+1;
-    if(next>=lobby.game.order.length){
-      if(lobby.game.round>=lobby.game.totalRounds){lobby.game.phase='finished';lobby.status='finished';}
-      else{lobby.game.round++;lobby.game.turnIndex=0;lobby.game.currentPlayerId=lobby.game.order[0];lobby.game.phase='question';lobby.game.usedBlocks=[];}
+    if(next>=lobby.game.order.length) {
+      if(lobby.game.round>=lobby.game.totalRounds) {
+        lobby.game.phase='finished';lobby.status='finished';
+      } else {
+        lobby.game.round++;lobby.game.turnIndex=0;
+        lobby.game.currentPlayerId=lobby.game.order[0];lobby.game.phase='question';
+      }
     } else {
-      lobby.game.turnIndex=next;lobby.game.currentPlayerId=lobby.game.order[next];lobby.game.phase='question';
+      lobby.game.turnIndex=next;
+      lobby.game.currentPlayerId=lobby.game.order[next];
+      lobby.game.phase='question';
     }
-    lobby.game.selectedBlock=null;lobby.game.lastSpin={playerId:playerId,points:points};
+    lobby.game.selectedBlock=null;
+    lobby.game.activeQuestionId=null;
+    lobby.game.lastSpin={playerId:playerId,points:points,block:block};
     writeLobby_(lobby);
-    return {points:points,finished:lobby.status==='finished'};
+    return {points:points,block:block,finished:lobby.status==='finished'};
   });
 }
+
 function writeHistory_(lobby,qid,correct,block,points) {
   const sh=getDb_().getSheetByName(CONFIG.HISTORY_SHEET);
   const player=lobby.players[lobby.game.currentPlayerId];
@@ -321,13 +349,37 @@ function writeHistory_(lobby,qid,correct,block,points) {
 function resetGame(payload) {
   return withLock_(function(){
     const lobby=readLobby_(String(payload.lobbyId));
-    if(lobby.hostId!==String(payload.playerId))throw new Error('Host sahaja boleh memulakan semula permainan.');
+    const playerId=String(payload.playerId);
+    validatePlayer_(lobby,playerId);
+    if(lobby.status!=='finished' && lobby.hostId!==playerId)
+      throw new Error('Host sahaja boleh menamatkan permainan yang sedang berjalan.');
     Object.keys(lobby.players).forEach(id=>lobby.players[id].ready=false);
     lobby.status='waiting';lobby.game=null;
+    writeLobby_(lobby);
+    return publicState_(lobby,playerId);
+  });
+}
+
+function replayGame(payload) {
+  return withLock_(function(){
+    const lobby=readLobby_(String(payload.lobbyId));
+    if(lobby.hostId!==String(payload.playerId)) throw new Error('Host sahaja boleh memulakan Replay.');
+    const ids=Object.keys(lobby.players||{});
+    if(ids.length<CONFIG.MIN_PLAYERS||ids.length>CONFIG.MAX_PLAYERS) throw new Error('Bilangan pemain tidak mencukupi.');
+    const rounds=Math.max(1,Math.min(20,Number(lobby.game&&lobby.game.totalRounds)||CONFIG.DEFAULT_ROUNDS));
+    const order=ids.slice().sort(()=>Math.random()-.5),scores={};
+    ids.forEach(id=>{scores[id]={name:lobby.players[id].name,points:0,correct:0,wrong:0};});
+    lobby.status='playing';
+    lobby.game={
+      round:1,totalRounds:rounds,order:order,turnIndex:0,currentPlayerId:order[0],
+      phase:'question',usedBlocks:[],usedQuestions:[],scores:scores,lastResult:null,
+      selectedBlock:null,answeredQuestionId:null,blueLastUsedRound:{},answerReview:[]
+    };
     writeLobby_(lobby);
     return publicState_(lobby,payload.playerId);
   });
 }
+
 /**
  * ACCOQUEST API adapter for Cloudflare Pages Functions.
  * ADD this to the existing Code.gs. Do not remove existing game functions.
@@ -356,6 +408,7 @@ function doPost(e) {
       case 'chooseBlock': result = chooseBlock(data); break;
       case 'spinPoints': result = spinPoints(data); break;
       case 'resetGame': result = resetGame(data); break;
+      case 'replayGame': result = replayGame(data); break;
       default: throw new Error('Unknown API action: ' + payload.action);
     }
     return ContentService.createTextOutput(JSON.stringify({
