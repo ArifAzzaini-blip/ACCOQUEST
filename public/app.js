@@ -430,14 +430,12 @@ function renderGame() {
       
               if (game.lastResult.correct) {
                   feedback.textContent =
-                      "✓ JAWAPAN BETUL!\nTahniah! Jawapan anda tepat.";
+                      "✓ JAWAPAN BETUL! Tahniah! Jawapan anda tepat.";
               } else {
                   feedback.textContent =
-                      `✗ JAWAPAN SALAH!\n\n` +
-                      `PEMBETULAN JAWAPAN:\n` +
-                      `Jawapan yang betul ialah ${game.lastResult.correctAnswer || "Tidak diketahui"}.`;
+                      "✗ JAWAPAN SALAH! Pilih block merah atau biru untuk meneruskan permainan.";
               }
-      
+
               feedback.className =
                   `feedback ${game.lastResult.correct ? "correct" : "wrong"}`;
       
@@ -488,17 +486,44 @@ function renderLeaderboard() {
 
 function renderBlocks() {
     const game = state?.game || {};
-    const blocks = game.availableBlocks || [];
-    const cooldown = game.blueCooldownRounds || 0;
+    let blocks = Array.isArray(game.availableBlocks) ? [...game.availableBlocks] : [];
+    const cooldown = Number(game.blueCooldownRounds || 0);
+
+    // Client-side display fallback. Server validation in chooseBlock() remains authoritative.
+    // Prefer the current player's own result, not a stale result from the previous turn.
+    let result = game.lastResult &&
+        String(game.lastResult.playerId || "") === String(game.currentPlayerId || "")
+        ? game.lastResult : null;
+
+    if (!result && Array.isArray(game.answerReview)) {
+        for (let i = game.answerReview.length - 1; i >= 0; i--) {
+            const item = game.answerReview[i];
+            if (String(item.playerId || "") === String(game.currentPlayerId || "")) {
+                result = { playerId: item.playerId, correct: !!item.correct };
+                break;
+            }
+        }
+    }
+
+    if (blocks.length === 0 && game.phase === "block" &&
+        game.isMyTurn && result) {
+        if (result.correct) {
+            blocks = ["GREEN"];
+        } else {
+            blocks = ["RED"];
+            if (cooldown === 0) blocks.push("BLUE");
+        }
+    }
+
     const labels = {
         GREEN: ["GREEN", "POSITIVE ONLY", "✓"],
         BLUE: ["BLUE", "POSITIVE / NEGATIVE", "±"],
         RED: ["RED", "NEGATIVE / ZERO", "−"]
     };
 
-    $("blockHint").textContent = game.lastResult?.correct
+    $("blockHint").textContent = result?.correct
         ? "Jawapan betul: block hijau sahaja tersedia."
-        : "Jawapan salah: pilih block merah atau biru. Block biru mempunyai cooldown 2 round.";
+        : "Jawapan salah: block merah atau biru tersedia. Block biru tertakluk pada cooldown 2 round.";
 
     $("blocks").innerHTML = ["GREEN", "BLUE", "RED"].map((block) => {
         const available = blocks.includes(block);
