@@ -548,17 +548,29 @@ function renderBlocks() {
             transitionBusy = true;
             document.querySelectorAll(".block").forEach((b) => { b.disabled = true; });
             try {
-                const updatedState = await act("chooseBlock", {
+                let updatedState = await act("chooseBlock", {
                     lobbyId, playerId, block: chosenBlock
                 });
 
+                // Backward compatibility: older Code.gs versions return only {ok, block}.
+                // In that case, fetch the authoritative state after the mutation.
+                if (!updatedState || !updatedState.game) {
+                    updatedState = await gas("getGameState", { lobbyId, playerId });
+                }
+
                 if (!updatedState || !updatedState.game || updatedState.game.phase !== "spin") {
-                    throw new Error("Block diterima tetapi backend tidak menukar fasa kepada SPIN. Semak deployment Code.gs.");
+                    throw new Error(
+                        "Block telah dihantar tetapi server masih bukan dalam fasa SPIN. " +
+                        "Pastikan Code.gs versi terkini sudah di-deploy sebagai New version."
+                    );
                 }
 
                 state = updatedState;
                 renderState();
-                toast(`${chosenBlock} BLOCK dipilih. Wheel sedang disediakan.`);
+                $("spinPanel").classList.remove("hidden");
+                $("blockPanel").classList.add("hidden");
+                setupWheelLabels();
+                toast(`${chosenBlock} BLOCK dipilih. Wheel sudah tersedia.`);
             } catch (error) {
                 toast(error.message || "Gagal memilih block.");
                 renderState();
