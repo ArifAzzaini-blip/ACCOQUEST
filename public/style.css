@@ -349,3 +349,15 @@
 .review-item:last-child { border-bottom:0; }
 .review-correct { color:#6ff0c2; } .review-wrong { color:#ff9ab0; }
 @media(max-width:600px){.wheel-wrap{width:220px;height:220px}.block{min-height:92px;padding:14px 6px}}
+
+
+/* Wheel visibility and labels */
+.wheel-wrap { position:relative; display:grid; place-items:center; margin:24px auto; }
+.wheel { position:relative; overflow:hidden; border:8px solid #263b61; box-shadow:0 0 0 4px rgba(68,155,255,.12),0 16px 42px rgba(0,0,0,.35); }
+.wheel-labels { position:absolute; inset:0; pointer-events:none; }
+.wheel-label { position:absolute; left:50%; top:50%; transform:
+  rotate(var(--label-angle)) translateY(-82px) rotate(var(--label-counter-angle));
+  transform-origin:0 0; color:#fff; font-weight:900; font-size:12px; text-shadow:0 1px 4px #000; white-space:nowrap; }
+.wheel-center { z-index:3; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+.wheel-pointer { z-index:4; }
+#spinPanel:not(.hidden) { display:block; }
