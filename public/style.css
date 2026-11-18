@@ -361,3 +361,9 @@
 .wheel-center { z-index:3; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
 .wheel-pointer { z-index:4; }
 #spinPanel:not(.hidden) { display:block; }
+
+
+/* Ensure reward wheel is visible when game state is in SPIN phase */
+#spinPanel:not(.hidden) { display:block !important; visibility:visible; opacity:1; }
+#spinPanel .wheel-wrap { display:grid; visibility:visible; opacity:1; min-height:260px; }
+#spinPanel .wheel { display:block; visibility:visible; opacity:1; }
