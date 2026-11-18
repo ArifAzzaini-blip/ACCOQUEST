@@ -36,6 +36,7 @@ let pollTimer = null;
 let countdown = null;
 let seconds = 60;
 let spinBusy = false;
+let transitionBusy = false;
 let wheelRotation = 0;
 const WHEEL_POINTS = [5, 10, 15, 20, 25, 30, 50, 0, -5, -10];
 let questionLoading = false;
@@ -242,7 +243,7 @@ async function poll() {
         });
 
         // Jangan render semula ketika Wheel sedang berpusing.
-        if (spinBusy || isSubmitting) return;
+        if (spinBusy || isSubmitting || transitionBusy) return;
 
         renderState();
 
@@ -415,6 +416,8 @@ function renderGame() {
 
     if (isMyTurn && isSpinPhase) {
         setupWheelLabels();
+        $("spinBtn").disabled = spinBusy;
+        $("spinResult").classList.add("hidden");
     }
 
     if (
@@ -540,14 +543,27 @@ function renderBlocks() {
 
     document.querySelectorAll(".block:not(:disabled)").forEach((button) => {
         button.addEventListener("click", async () => {
-            button.disabled = true;
+            if (transitionBusy) return;
+            const chosenBlock = button.dataset.block;
+            transitionBusy = true;
+            document.querySelectorAll(".block").forEach((b) => { b.disabled = true; });
             try {
-                await act("chooseBlock", {
-                    lobbyId, playerId, block: button.dataset.block
+                const updatedState = await act("chooseBlock", {
+                    lobbyId, playerId, block: chosenBlock
                 });
-                await poll();
+
+                if (!updatedState || !updatedState.game || updatedState.game.phase !== "spin") {
+                    throw new Error("Block diterima tetapi backend tidak menukar fasa kepada SPIN. Semak deployment Code.gs.");
+                }
+
+                state = updatedState;
+                renderState();
+                toast(`${chosenBlock} BLOCK dipilih. Wheel sedang disediakan.`);
             } catch (error) {
-                button.disabled = false;
+                toast(error.message || "Gagal memilih block.");
+                renderState();
+            } finally {
+                transitionBusy = false;
             }
         });
     });
